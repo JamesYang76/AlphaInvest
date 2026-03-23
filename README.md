@@ -23,12 +23,22 @@
 - **배포 및 리포트**:
   - `Notion API` 연동
 
-## 2. 에이전트 워크플로우 (LangGraph)
-1. **Macro Analysis (거시 경제 분석)**
-2. **Risk Detection (리스크 스캔)**
-3. **Portfolio Diagnosis (개인 계좌 진단)**
-4. **Alpha Hunter (알파 섹터 발굴)**
-5. **Report & Publish (최종 리포트 발행)**
+## 2. 에이전트 워크플로우 (LangGraph 기반 병렬 아키텍처)
+본 프로젝트는 속도(Latency) 최적화와 리포트 품질 검수를 위해 **다중 에이전트 병렬(Concurrency) 및 피드백 구조**를 채택했습니다.
+
+1. **리서치 그룹 (동시 실행 - Fan-out) 🚀**
+   - 아래 4명의 에이전트가 각자의 임무를 비동기 병렬로 동시에 수행하여 전체 실행 시간을 획기적으로 단축합니다.
+   - 📊 `Macro Agent` : 거시 경제 데이터 스캔 및 시황 요약
+   - 🛑 `Risk Agent` : 잠재적 폭락 위험 섹터 경고
+   - 🎯 `Alpha Agent` : 글로벌 자금 이동 기반 상승 주도 섹터 발굴
+   - 💼 `Portfolio Agent` : 위 3가지 뷰를 바탕으로 내 계좌 리밸런싱 전략 도출
+
+2. **품질 검수자 (대기 후 취합 - Fan-in) 🕵️‍♂️**
+   - ⚖️ `GP (Gatekeeper) Agent`: 4명의 리서치 결과가 모두 모일 때까지 대기한 후 교차 검증을 실시합니다.
+   - 만약 논리가 충돌하거나 부실한 결과물이 발견되면, 해당 에이전트에게 반려(Reject)하여 **독자적인 재작성 루프(Feedback Loop)**를 수행하게 합니다.
+
+3. **총괄 및 발행 (Publish) 📝**
+   - 📰 `CIO Agent`: GP의 까다로운 검수를 모두 통과한 무결점 데이터 종합본을 넘겨받아, 최종 퍼블리시용 Markdown 리포트를 작성합니다.
 
 ## 3. 실행 계획
 - **1일차**: 팀빌딩, 아키텍처 검토/수립, 개발환경 세팅
@@ -65,6 +75,12 @@ cp .env.example .env
 ```bash
 python main.py
 ```
+
+### 4) 로그 레벨 제어 (선택 사항)
+실행 시 시스템 로그의 출력 양을 조절할 수 있습니다.
+- **모든 로그 보기 (기본값)**: `python main.py`
+- **INFO 로그 숨기기 (중요 알림/경고만 보기)**: `LOG_LEVEL=WARNING python main.py`
+- **디버그 모드**: `LOG_LEVEL=DEBUG python main.py` (에이전트 내부 통신 확인용)
 
 ## 5. Style 가이드
 
