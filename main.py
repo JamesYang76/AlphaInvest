@@ -40,9 +40,9 @@ def main():
 
     # 3. 결과 출력
     logger.info("✅ 모든 분석 생중계가 완료되었습니다!")
-    logger.info(f"최종 투입 포트폴리오: {final_state.get('user_portfolio', [])}")
-    logger.info(f"[CIO 최종 리포트 초안]:\n{final_state.get('final_report', '')}")
-    logger.info(f"[GP 검수 루프 횟수]: {final_state.get('retry_count', 0)}회")
+    logger.info(f"최종 투입 포트폴리오: {final_state.get(StateKey.USER_PORTFOLIO, [])}")
+    logger.info(f"[CIO 최종 리포트 초안]:\n{final_state.get(StateKey.FINAL_REPORT, '')}")
+    logger.info(f"[GP 검수 루프 횟수]: {final_state.get(StateKey.RETRY_COUNT, 0)}회")
 
 
 if __name__ == "__main__":
