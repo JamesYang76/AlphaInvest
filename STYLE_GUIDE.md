@@ -44,11 +44,12 @@ def process_portfolio(user_id: int, portfolio: dict) -> bool:
 
 우리 프로젝트는 **Ruff (`ruff`)** 단일 도구로 모든 스타일 검사와 포매팅을 완벽하게 통일합니다. (Python 생태계에서 가장 빠르고 강력한 차세대 All-in-One 툴)
 
-**명령어 실행 방법**:
+**명령어 실행 방법 (수동 작업 시)**:
+커밋을 하기 전 항상 아래의 2단계 콤보를 실행하는 것을 권장합니다.
 ```bash
-# 코드 검사 (Linter: 문법 오류, 안 쓰는 변수, 네이밍 체크 등 검출)
-ruff check .
+# 1. 쓸모 없는 코드 제거 및 논리적 오류 수술, import 정렬 (Linter Fix)
+ruff check --fix .
 
-# 코드 포맷 자동 정렬 수행 (Formatter: 엔터, 띄어쓰기 88자 기준 등 알아서 조정)
+# 2. 띄어쓰기, 쌍따옴표 등 스타일 자동 정렬 (Formatter)
 ruff format .
 ```

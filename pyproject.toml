@@ -6,13 +6,13 @@ readme = "README.md"
 requires-python = ">=3.12"
 
 [tool.ruff]
-# Ruff의 기본 줄바꿈 기준(88자) 설정
-line-length = 88
+# Ruff의 기본 줄바꿈 기준(120자) 설정
+line-length = 120
 target-version = "py312"
 
 [tool.ruff.lint]
-# 파이썬 커뮤니티 기본 검사 규칙 (E: pycodestyle, F: pyflakes, I: isort)
-select = ["E", "F", "I"]
+# 파이썬 커뮤니티 기본 검사 및 명명 규칙 강제 (E: pycodestyle, F: pyflakes, I: isort, N: pep8-naming)
+select = ["E", "F", "I", "N"]
 
 [tool.ruff.format]
 # 따옴표나 들여쓰기 방식도 Black과 동일하게 맞춤
