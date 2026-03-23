@@ -2,7 +2,6 @@ from agents.constants import StateKey
 from agents.state import get_initial_state
 from agents.workflow import build_skeleton
 from data.mock_data import get_portfolio
-from utils.helpers import export_graph_visualization
 from utils.logger import get_logger
 
 logger = get_logger("main")
@@ -13,7 +12,9 @@ def main():
 
     # 1. 그래프 빌드 및 시각화
     app = build_skeleton()
-    export_graph_visualization(app)
+
+    # 그래프 시각화는 주석 처리
+    # export_graph_visualization(app)
 
     # 2. 파이프라인 구동 (Streaming Mode)
     logger.info("📡 AlphaInvest 분석 엔진 실시간 스트리밍 시작...")
