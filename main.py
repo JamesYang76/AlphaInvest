@@ -21,23 +21,22 @@ def main():
 
     initial_state = get_initial_state(user_portfolio=get_portfolio())
 
+    # 📌 선언형 로깅 매핑 (절차적 분기문 제거)
+    log_actions = {
+        StateKey.MACRO_RESULT: lambda v: logger.info(f"🔍 시황 요약: {v[:50]}..."),
+        StateKey.RISK_RESULT: lambda v: logger.info(f"🛑 리스크 알림: {v[:50]}..."),
+        StateKey.PORTFOLIO_RESULT: lambda v: logger.info(f"💼 포트폴리오 진단 완료: {v[:50]}..."),
+        StateKey.FINAL_REPORT: lambda _: logger.info("📝 최종 리포트 작성이 완료되었습니다."),
+    }
+
     final_state = initial_state
     for step in app.stream(initial_state, stream_mode="updates"):
         for node_name, updated_values in step.items():
             logger.info(f"--- [ {node_name} ] 작업 완료 ---")
             final_state.update(updated_values)  # 상태 누적 업데이트
 
-            # 실시간 진행 상황 요약
-            for key, val in updated_values.items():
-                match key:
-                    case StateKey.MACRO_RESULT:
-                        logger.info(f"🔍 시황 요약: {val[:50]}...")
-                    case StateKey.RISK_RESULT:
-                        logger.info(f"🛑 리스크 알림: {val[:50]}...")
-                    case StateKey.PORTFOLIO_RESULT:
-                        logger.info(f"💼 포트폴리오 진단 완료: {val[:50]}...")
-                    case StateKey.FINAL_REPORT:
-                        logger.info("📝 최종 리포트 작성이 완료되었습니다.")
+            # 실시간 진행 상황 요약 (for문 없이 리스트 내포와 왈러스 연산자를 이용한 완전 선언적 처리)
+            [action(val) for key, val in updated_values.items() if (action := log_actions.get(key))]
 
     # 3. 결과 출력
     logger.info("✅ 모든 분석 생중계가 완료되었습니다!")
