@@ -1,0 +1,18 @@
+repos:
+  # 기본 파일 무결성 및 공백, 줄바꿈 자동 처리
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+
+  # Ruff (Linter & Formatter 통합)
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.3.4
+    hooks:
+      # 1. 쓸모없는 import와 로직 정리 (Check --fix)
+      - id: ruff
+        args: [ --fix ]
+      # 2. 띄어쓰기 등 포매팅 강제 (Format)
+      - id: ruff-format

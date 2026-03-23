@@ -2,6 +2,7 @@ from utils.logger import get_logger
 
 logger = get_logger("utils.helpers")
 
+
 def print_welcome_message(app_name: str):
     """
     앱 이름을 받아 시스템 초기화 메시지를 출력.
