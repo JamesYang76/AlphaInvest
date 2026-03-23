@@ -1,0 +1,17 @@
+# Data Gathering
+fredapi
+yfinance
+pykrx
+finance-datareader
+tavily-python
+
+# Agent / LLM
+langgraph
+langchain
+langchain-core
+langchain-openai
+
+# Utilities
+python-dotenv
+notion-client
+pydantic

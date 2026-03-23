@@ -1,0 +1,35 @@
+# Environments
+venv/
+.venv/
+env/
+alphainv/
+
+# Environment Variables
+.env
+.env.local
+
+# Python Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Data
+.DS_Store
+
+# Logs
+*.log
+
+# Caches & temporary files
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
