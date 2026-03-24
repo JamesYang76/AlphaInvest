@@ -7,7 +7,6 @@ from langchain_core.prompts import ChatPromptTemplate
 from agents.constants import AgentName, StateKey
 from agents.state import AgentState
 from data.fetchers import fetch_macro_data, fetch_news, get_llm
-from utils.helpers import format_feedback
 from utils.logger import get_logger
 
 logger = get_logger("agents.nodes.macro")
@@ -25,15 +24,13 @@ MACRO_SYSTEM_PROMPT = dedent("""
 
     분석은 다음 형식을 반드시 지켜주세요:
     ## 거시경제 환경 요약
-    1. **현재 상황**: (3줄)
-    2. **투자자에게 시사하는 점**: (3줄)
+    1. **현재 상황**: (2~3줄)
+    2. **투자자에게 시사하는 점**: (2~3줄)
     3. **주요 리스크 요인**: (불릿 3개)
 """).strip()
 
 
 def macro_node(state: AgentState) -> Dict[str, Any]:
-    gp_feedback = format_feedback(state, AgentName.MACRO)
-
     # ① 실시간 데이터 수집 (지표 및 뉴스)
     macro_data = fetch_macro_data()
     # 쿼리에 팩트체크용 최신 맥락을 강화
@@ -61,7 +58,6 @@ def macro_node(state: AgentState) -> Dict[str, Any]:
 
                     [최신 뉴스 (Tavily)]
                     {news_data}
-                    {gp_feedback}
                 """).strip(),
             ),
         ]
@@ -81,12 +77,9 @@ def macro_node(state: AgentState) -> Dict[str, Any]:
                 "vix": macro_data.get("vix", "N/A"),
                 "sp500_trend": macro_data.get("sp500_trend", "N/A"),
                 "news_data": news,
-                "gp_feedback": gp_feedback,
             }
         )
         result_text = response.content
-        if gp_feedback:
-            logger.info("🔄 [Feedback 반영] 피드백을 수용하여 분석을 갱신했습니다.")
 
     except Exception as e:
         # 장애가 나도 파이프라인이 죽지 않도록 방어

@@ -22,11 +22,7 @@ class StateKey:
     CURRENT_REPORT: Final = "current_report"  # 💡 GP 심사용 공통 리포트 키
     FINAL_REPORT: Final = "final_report"
 
-    # 3. 제어 및 카운트
-    GP_FEEDBACK: Final = "gp_feedback"
-    RETRY_COUNT: Final = "retry_count"
-
-    # 4. 메모리(Messages) 키
+    # 3. 메모리(Messages) 키
     MACRO_MESSAGES: Final = "macro_messages"
     RISK_MESSAGES: Final = "risk_messages"
     ALPHA_MESSAGES: Final = "alpha_messages"

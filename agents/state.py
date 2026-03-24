@@ -30,10 +30,6 @@ class AgentState(TypedDict):
     portfolio_result: str
     current_report: str  # 💡 GP 검수용 공통 리포트
 
-    # 4. GP(품질 검수자)의 라우팅 및 피드백용 상태
-    # 예: {"target_node": "risk_agent", "feedback_reason": "금리 하방 압력 누락됨"}
-    gp_feedback: Dict[str, Any]
-    retry_count: int
     last_node: str  # 💡 현재 실행 중인/실행 완료된 노드를 추적합니다.
 
     # 5. CIO(총괄 편집장)가 병합한 최종 퍼블리시 리포트
@@ -57,7 +53,5 @@ def get_initial_state(user_portfolio: List[Dict[str, Any]]) -> AgentState:
         StateKey.ALPHA_RESULT: "",
         StateKey.PORTFOLIO_RESULT: "",
         StateKey.CURRENT_REPORT: "",
-        StateKey.GP_FEEDBACK: {},
-        StateKey.RETRY_COUNT: 0,
         StateKey.FINAL_REPORT: "",
     }

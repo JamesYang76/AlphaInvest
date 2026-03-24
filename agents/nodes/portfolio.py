@@ -7,7 +7,6 @@ from langchain_openai import ChatOpenAI
 
 from agents.constants import AgentName, ModelConfig, StateKey
 from agents.state import AgentState
-from utils.helpers import format_feedback
 from utils.logger import get_logger
 from utils.macro_data import get_sector_context
 from utils.stock_data import enrich_portfolio_data
@@ -42,9 +41,6 @@ def portfolio_node(state: AgentState) -> Dict[str, Any]:
     """
     유저의 포트폴리오를 진단하여 실시간 시황(Tavily, FRED 연동)에 맞는 전략을 생성하는 에이전트 노드입니다.
     """
-    # 💡 0. GP 피드백 확인
-    gp_feedback = format_feedback(state, AgentName.PORTFOLIO)
-
     # 💡 1. OpenAI API 키 검증 (가드 클로즈)
     if not os.getenv("OPENAI_API_KEY"):
         logger.error("LLM 연결 실패: .env 파일에 OPENAI_API_KEY를 먼저 설정해주세요.")
@@ -81,11 +77,7 @@ def portfolio_node(state: AgentState) -> Dict[str, Any]:
                     {sector_info}
 
                     ---
-                    **진단 지침**:
-                    방금 진행된 [거시 경제] 분석 결과와 비교했을 때, 고객의 현재 포트폴리오가 시의적절한지 진단하세요.
-                    아직 구체적인 리스크 스캔(Risk)이나 신규 기회(Alpha) 발굴 단계 전이므로,
                     **거시 환경에 비추어 본 현재 자산 상태의 적절성**을 수석 PB의 관점에서 냉철하게 평가하십시오.
-                    {gp_feedback}
                 """).strip(),
             ),
         ]
@@ -101,7 +93,6 @@ def portfolio_node(state: AgentState) -> Dict[str, Any]:
         "enriched_portfolio_str": enriched_portfolio_str,
         "macro_info": macro_info,
         "sector_info": sector_info,
-        "gp_feedback": gp_feedback,
     }
 
     try:

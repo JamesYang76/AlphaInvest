@@ -76,23 +76,3 @@ def parse_llm_json(text: str) -> List[Dict[str, Any]]:
             except json.JSONDecodeError:
                 pass
     return []
-
-
-def format_feedback(state: dict, node_name: str) -> str:
-    """수석 애널리스트(GP)의 피드백을 현재 노드에 맞춰 포맷팅합니다."""
-    from agents.constants import StateKey
-
-    feedback = state.get(StateKey.GP_FEEDBACK, {})
-    if not feedback:
-        return ""
-
-    target = feedback.get("target_node")
-    reason = feedback.get("feedback_reason", "")
-    if not reason:
-        return ""
-
-    if target == node_name:
-        return f"\n[수석 애널리스트 피드백]\n" f"{reason}\n" "위 사유로 반려되었습니다. 최우선적으로 이를 무조건 반영하여 보완해 주세요.\n"
-    else:
-        # 타 노드 피드백도 참고용으로 제공 가능 (필요 시)
-        return f"\n[참고 - 타 분석 유닛({target}) 피드백]: {reason}\n"
