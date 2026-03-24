@@ -1,58 +1,35 @@
-from datetime import datetime, timedelta
 from typing import Any, Dict
 
 import yfinance as yf
-from pykrx import stock as krx
 
 
 def get_stock_info(ticker: str, name: str = "") -> Dict[str, Any]:
     """
-    한국 주식(KRX)과 해외 주식(Yahoo Finance)의 실시간 데이터를 통합하여 공통 포맷으로 반환합니다.
+    Yahoo Finance(yfinance)를 단일 소스로 사용하여 실시간 데이터를 통합 포맷으로 반환합니다.
     """
     is_kr = ticker.endswith(".KS") or ticker.endswith(".KQ")
 
     current_price = 0.0
-    per, pbr = "N/A", "N/A"
     description = "데이터 없음"
     news_snippet = "최근 관련 뉴스 없음"
 
     try:
-        # 1. 한국 주식 처리 (pykrx 우선 사용)
-        if is_kr:
-            pure_ticker = ticker.split(".")[0]
-            # 최근 영업일 데이터 가져오기 (최대 7일 전까지 시도)
-            for i in range(7):
-                target_date = (datetime.now() - timedelta(days=i)).strftime("%Y%m%d")
-                df = krx.get_market_ohlcv_by_date(target_date, target_date, pure_ticker)
-                if not df.empty:
-                    current_price = float(df["종가"].iloc[-1])
-                    break
-
-            # 2. Fundamental 데이터 (PER, PBR) 별도 확보 (최대 14일 전까지 추적)
-            for j in range(i, i + 14):
-                f_date = (datetime.now() - timedelta(days=j)).strftime("%Y%m%d")
-                df_f = krx.get_market_fundamental(f_date, f_date, pure_ticker)
-                if not df_f.empty and df_f["PER"].iloc[-1] != 0:
-                    per = df_f["PER"].iloc[-1]
-                    pbr = df_f["PBR"].iloc[-1]
-                    break
-
-        # 2. 공통/해외 및 추가 정보 (yfinance 사용) - 지표 상호 보완
+        # 1. 시세 및 기본 정보 수집 (yfinance)
         yf_stock = yf.Ticker(ticker)
         info = yf_stock.info
 
-        # 현재가 보정 (가장 최신 값 우선)
-        if current_price == 0:
-            current_price = info.get("currentPrice", info.get("regularMarketPrice", 0))
-            if not current_price:
-                current_price = yf_stock.fast_info.get("lastPrice", 0)
-            if not current_price:
-                hist = yf_stock.history(period="5d")
-                current_price = hist["Close"].iloc[-1] if not hist.empty else 0
+        # 현재가 확보 (다양한 속성에서 시도)
+        current_price = info.get("currentPrice", info.get("regularMarketPrice", 0))
+        if not current_price or current_price == 0:
+            current_price = yf_stock.fast_info.get("lastPrice", 0)
+        if not current_price or current_price == 0:
+            hist = yf_stock.history(period="1d")
+            current_price = hist["Close"].iloc[-1] if not hist.empty else 0
 
-        # 지표 상호 보완 (PER, PBR, EPS, BPS, ROE, Debt)
-        per = info.get("trailingPE", info.get("forwardPE", info.get("priceEpsCurrentYear", per)))
-        pbr = info.get("priceToBook", pbr)
+        # 지표 추출 (PER, PBR, EPS, BPS, ROE, Debt)
+        # 지능형 매핑: trailingPE(과거 실적 PER) -> forwardPE(전망 PER) -> priceEpsCurrentYear(올해 목표가/예상 EPS)
+        per = info.get("trailingPE", info.get("forwardPE", info.get("priceEpsCurrentYear", "N/A")))
+        pbr = info.get("priceToBook", "N/A")
         eps = info.get("trailingEps", info.get("epsCurrentYear", "N/A"))
         bps = info.get("bookValue", "N/A")
         roe = info.get("returnOnEquity", "N/A")
