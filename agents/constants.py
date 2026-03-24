@@ -55,5 +55,5 @@ class ModelConfig:
     모든 에이전트가 공유하는 기본 언어 모델 및 온도 등 파라미터를 중앙에서 관리합니다.
     """
 
-    DEFAULT_LLM_MODEL: Final = "gpt-4o-mini"
+    DEFAULT_LLM_MODEL: Final = "gpt-4o"
     DEFAULT_TEMPERATURE: Final = 0.0
