@@ -20,8 +20,6 @@ def main():
     # export_graph_visualization(app)
 
     # 2. 파이프라인 구동 (Streaming Mode)
-    logger.info("📡 AlphaInvest 분석 엔진 실시간 스트리밍 시작...")
-
     initial_state = get_initial_state(user_portfolio=get_portfolio())
 
     # 📌 선언형 로깅 매핑 (절차적 분기문 제거)
@@ -43,9 +41,6 @@ def main():
 
     # 3. 결과 출력
     logger.info("✅ 모든 분석 생중계가 완료되었습니다!")
-    logger.info(f"최종 투입 포트폴리오: {final_state.get(StateKey.USER_PORTFOLIO, [])}")
-    logger.info(f"[CIO 최종 리포트 초안]:\n{final_state.get(StateKey.FINAL_REPORT, '')}")
-    logger.info(f"[GP 검수 루프 횟수]: {final_state.get(StateKey.RETRY_COUNT, 0)}회")
 
 
 if __name__ == "__main__":

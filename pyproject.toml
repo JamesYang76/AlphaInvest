@@ -6,8 +6,8 @@ readme = "README.md"
 requires-python = ">=3.12"
 
 [tool.ruff]
-# Ruff의 기본 줄바꿈 기준(120자) 설정
-line-length = 120
+# Ruff의 기본 줄바꿈 기준(150자) 설정
+line-length = 150
 target-version = "py312"
 
 [tool.ruff.lint]
