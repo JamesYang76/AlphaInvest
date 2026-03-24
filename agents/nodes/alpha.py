@@ -1,16 +1,19 @@
 from __future__ import annotations
 
+import json
+import os
 import sys
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
 from dotenv import load_dotenv
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
+from langchain_core.messages import AIMessage, HumanMessage
+from openai import OpenAI
 
-# ==========================================================
-# 경로 설정 및 .env 로드
-# ==========================================================
+# =========================================================
+# Path / Env
+# =========================================================
 CURRENT_FILE = Path(__file__).resolve()
 PROJECT_ROOT = CURRENT_FILE.parents[2]
 
@@ -19,244 +22,451 @@ if str(PROJECT_ROOT) not in sys.path:
 
 load_dotenv(PROJECT_ROOT / ".env")
 
-from agents.constants import ModelConfig, StateKey
+# =========================================================
+# Project imports
+# =========================================================
+from agents.constants import StateKey
 from agents.state import AgentState
 
+# =========================================================
+# OpenAI
+# =========================================================
+OPENAI_MODEL = os.getenv("OPENAI_ALPHA_MODEL", "gpt-4.1-mini")
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-# ==========================================================
-# 시스템 프롬프트
-# ==========================================================
-ALPHA_SYSTEM_PROMPT = """
-너는 AlphaInvest 서비스에서 소비자에게 제공되는
-알파(초과수익) 섹터 추천 리포트를 작성하는 AI다.
-
-역할 정의:
-- 사용자의 현재 보유 종목과 포트폴리오 편중 가능성을 참고해
-  신규 진입 유망 섹터 2개를 선정한다.
-- 추천 섹터 2개는 반드시 성격이 다르게 구성한다.
-  - 1개는 포트폴리오 편중을 보완할 수 있는 섹터
-  - 1개는 현재 시장에서 구조적 성장 기대가 큰 섹터
-- 각 섹터마다 미국 대표 종목 2개와 한국 대표 종목 2개를 제시한다.
-- 내부 시스템 설명이 아니라, 소비자가 읽는 투자 리포트처럼 써야 한다.
-
-작성 가이드라인:
-1. 문체
-- 어렵고 기술적인 표현은 줄이고, 투자 리포트처럼 신뢰감 있게 설명한다.
-- 과장 광고성 표현은 금지한다.
-
-2. 추천 기준
-- 단순 유행 테마보다 구조적 성장 가능성, 실적 가시성, 산업 대표성, 분산 효과를 고려한다.
-- 사용자의 기존 보유 종목이 특정 섹터에 쏠려 있다면, 그 편중을 완화할 수 있는 섹터를 최소 1개 포함한다.
-- 사용자의 보유 종목 정보가 부족한 경우에도 일반 투자자 관점에서 설득력 있게 작성한다.
-
-3. 종목 제시 규칙
-- 섹터별로 미국 대표 종목 2개, 한국 대표 종목 2개를 반드시 제시한다.
-- 실제 시장에서 널리 알려진 대형주 또는 대표주 중심으로 제시한다.
-- 존재하지 않는 종목을 만들어내지 않는다.
-- 테마성이 지나치게 강한 군소형주는 피한다.
-
-4. 출력 형식
-반드시 아래 형식을 지켜라.
-
-## 3. 🚀 AI 인사이트: 신규 진입 추천 섹터 Top 2
-
-- **[추천 섹터 1: 섹터명]**
-  - **논리적 배경:** ...
-  - **투자 포인트:** ...
-  - **포트폴리오 보완 관점:** ...
-  - **관심 종목군:** 미국 대장주: ..., ... / 한국 대장주: ..., ...
-
-- **[추천 섹터 2: 섹터명]**
-  - **논리적 배경:** ...
-  - **투자 포인트:** ...
-  - **포트폴리오 보완 관점:** ...
-  - **관심 종목군:** 미국 대장주: ..., ... / 한국 대장주: ..., ...
-
-5. 금지 사항
-- "에이전트", "모듈", "state", "시스템", "내부 로직" 같은 내부 구현 표현 금지
-- 점수 계산식, 알고리즘 설명 금지
-- "좋아 보인다" 식의 근거 없는 표현 금지
-
-6. 추가 작성 규칙
-- "성장주", "방어주"처럼 뭉뚱그린 표현 대신 반드시 구체적인 산업 섹터명으로 작성한다.
-  예: 반도체, 전력 인프라, 헬스케어, 필수소비재, 산업자동화
-- 추천 섹터 2개는 반드시 서로 성격이 달라야 한다.
-- 사용자의 기존 포트폴리오 편중을 어떻게 보완하는지 반드시 명시한다.
-- 섹터와 종목 연결이 자연스럽고 설득력 있어야 한다.
-"""
+# =========================================================
+# fetch.py adapter
+# 최신 데이터 수집은 fetch.py 담당
+# 함수명이 다르면 여기만 맞추면 됨
+# =========================================================
+try:
+    from agents.nodes.fetch import fetch_alpha_facts
+except ImportError:
+    fetch_alpha_facts = None
 
 
-# ==========================================================
-# 보조 함수
-# ==========================================================
+# =========================================================
+# Domain rules
+# =========================================================
+@dataclass(frozen=True)
+class SectorRule:
+    name: str
+    thesis: str
+    us_leaders: Sequence[str]
+    kr_leaders: Sequence[str]
+    keywords: Sequence[str]
+
+
+SECTOR_RULES: Sequence[SectorRule] = (
+    SectorRule(
+        name="전력 인프라 / 전력기기",
+        thesis=(
+            "AI 데이터센터·산업 전력 수요 증가와 노후 전력망 교체 수요가 동시에 작동하는 구간으로 해석한다."
+        ),
+        us_leaders=("Eaton", "Vertiv"),
+        kr_leaders=("효성중공업", "LS ELECTRIC"),
+        keywords=(
+            "power",
+            "electric",
+            "grid",
+            "utility",
+            "transformer",
+            "transmission",
+            "distribution",
+            "data center power",
+            "전력",
+            "전력망",
+            "변압기",
+            "송전",
+            "배전",
+        ),
+    ),
+    SectorRule(
+        name="AI 반도체 / AI 인프라",
+        thesis=(
+            "기업 투자 우선순위가 생성형 AI 인프라와 고성능 컴퓨팅으로 이동하는 국면으로 해석한다."
+        ),
+        us_leaders=("NVIDIA", "Broadcom"),
+        kr_leaders=("SK하이닉스", "한미반도체"),
+        keywords=(
+            "ai",
+            "gpu",
+            "semiconductor",
+            "chip",
+            "hbm",
+            "server",
+            "inference",
+            "compute",
+            "반도체",
+            "고대역폭 메모리",
+            "HBM",
+            "서버",
+            "AI 인프라",
+        ),
+    ),
+    SectorRule(
+        name="K-뷰티 수출",
+        thesis=(
+            "브랜드·유통·플랫폼이 결합된 수출 확장 구간에서는 이익 레버리지와 재평가 가능성이 커진다고 본다."
+        ),
+        us_leaders=("e.l.f. Beauty", "Ulta Beauty"),
+        kr_leaders=("실리콘투", "한국콜마"),
+        keywords=(
+            "beauty",
+            "cosmetic",
+            "k-beauty",
+            "export",
+            "consumer",
+            "brand",
+            "유통",
+            "화장품",
+            "미용",
+            "뷰티",
+            "수출",
+        ),
+    ),
+    SectorRule(
+        name="방산 / 우주항공",
+        thesis=(
+            "지정학적 긴장과 재고 확충 수요가 이어질수록 수주 가시성과 실적 지속성이 높아진다고 본다."
+        ),
+        us_leaders=("Lockheed Martin", "RTX"),
+        kr_leaders=("한화에어로스페이스", "LIG넥스원"),
+        keywords=(
+            "defense",
+            "military",
+            "missile",
+            "aerospace",
+            "security",
+            "rearm",
+            "방산",
+            "군수",
+            "미사일",
+            "우주항공",
+        ),
+    ),
+    SectorRule(
+        name="사이버보안",
+        thesis=(
+            "기업 IT 예산이 선택적 축소를 겪어도 보안 지출은 방어적으로 유지되는 경향이 있다고 본다."
+        ),
+        us_leaders=("Palo Alto Networks", "CrowdStrike"),
+        kr_leaders=("안랩", "파수"),
+        keywords=(
+            "cyber",
+            "security",
+            "breach",
+            "threat",
+            "endpoint",
+            "zero trust",
+            "보안",
+            "사이버",
+            "해킹",
+            "위협",
+        ),
+    ),
+)
+
+NEGATIVE_HINTS: Sequence[str] = (
+    "commercial real estate",
+    "office",
+    "distressed",
+    "bankruptcy",
+    "rollover risk",
+    "inventory glut",
+    "price war",
+    "dilution",
+    "오피스",
+    "부도",
+    "재고 부담",
+    "증자",
+    "가격 경쟁",
+)
+
+
+# =========================================================
+# Helpers
+# =========================================================
+def _get_state_value(state: AgentState, key: str, default: Any) -> Any:
+    return state.get(key, default)
+
+
 def _safe_text(value: Any) -> str:
-    return value if isinstance(value, str) else ""
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    try:
+        return json.dumps(value, ensure_ascii=False, indent=2)
+    except Exception:
+        return str(value)
 
 
-def _extract_tickers(user_portfolio: List[Dict[str, Any]]) -> List[str]:
-    tickers: List[str] = []
+def _normalize_item(item: Any) -> str:
+    if isinstance(item, str):
+        return item.strip()
 
-    for stock in user_portfolio:
-        if not isinstance(stock, dict):
+    if isinstance(item, Mapping):
+        fields = (
+            item.get("title"),
+            item.get("summary"),
+            item.get("snippet"),
+            item.get("description"),
+            item.get("source"),
+            item.get("date"),
+            item.get("url"),
+        )
+        return " | ".join(filter(None, map(_safe_text, fields))).strip()
+
+    return _safe_text(item)
+
+
+def _normalize_facts(raw_facts: Any) -> List[str]:
+    if raw_facts is None:
+        return []
+
+    if isinstance(raw_facts, Mapping):
+        candidate_lists = (
+            raw_facts.get("facts"),
+            raw_facts.get("results"),
+            raw_facts.get("items"),
+            raw_facts.get("articles"),
+            raw_facts.get("documents"),
+            raw_facts.get("data"),
+        )
+        flattened = next((value for value in candidate_lists if value), [])
+        if isinstance(flattened, list):
+            return [text for text in map(_normalize_item, flattened) if text]
+        return [_normalize_item(flattened)] if flattened else []
+
+    if isinstance(raw_facts, list):
+        return [text for text in map(_normalize_item, raw_facts) if text]
+
+    normalized = _normalize_item(raw_facts)
+    return [normalized] if normalized else []
+
+
+def _fetch_alpha_facts_from_adapter(state: AgentState) -> List[str]:
+    if fetch_alpha_facts is None:
+        return []
+
+    call_candidates = (
+        lambda: fetch_alpha_facts(state),
+        lambda: fetch_alpha_facts(
+            user_portfolio=_get_state_value(state, StateKey.USER_PORTFOLIO, []),
+            macro_result=_get_state_value(state, StateKey.MACRO_RESULT, ""),
+            risk_result=_get_state_value(state, StateKey.RISK_RESULT, ""),
+        ),
+        lambda: fetch_alpha_facts(
+            _get_state_value(state, StateKey.USER_PORTFOLIO, []),
+            _get_state_value(state, StateKey.MACRO_RESULT, ""),
+            _get_state_value(state, StateKey.RISK_RESULT, ""),
+        ),
+    )
+
+    for candidate in call_candidates:
+        try:
+            return _normalize_facts(candidate())
+        except TypeError:
             continue
+        except Exception:
+            return []
 
-        ticker = str(stock.get("ticker", "")).strip().upper()
-        if ticker:
-            tickers.append(ticker)
-
-    return tickers
+    return []
 
 
-def _infer_portfolio_bias(tickers: List[str]) -> str:
-    tech_keywords = {"AAPL", "MSFT", "NVDA", "AMD", "TSLA", "QQQ", "META", "GOOGL", "AMZN", "AVGO"}
-    semiconductor_keywords = {"NVDA", "AMD", "TSM", "AVGO", "QCOM", "MU", "INTC", "SOXX"}
-    healthcare_keywords = {"JNJ", "PFE", "MRK", "LLY", "ABBV", "UNH"}
-    finance_keywords = {"JPM", "BAC", "GS", "MS", "WFC", "C"}
-    energy_keywords = {"XOM", "CVX", "SLB", "COP"}
-    consumer_keywords = {"PG", "KO", "PEP", "COST", "WMT"}
-
-    counts = {
-        "기술주": 0,
-        "반도체": 0,
-        "헬스케어": 0,
-        "금융": 0,
-        "에너지": 0,
-        "필수소비재": 0,
+def _build_context_texts(state: AgentState, facts: Sequence[str]) -> Dict[str, str]:
+    return {
+        "portfolio_text": _safe_text(_get_state_value(state, StateKey.USER_PORTFOLIO, [])),
+        "macro_text": _safe_text(_get_state_value(state, StateKey.MACRO_RESULT, "")),
+        "risk_text": _safe_text(_get_state_value(state, StateKey.RISK_RESULT, "")),
+        "facts_text": "\n".join(f"- {fact}" for fact in facts),
     }
 
-    for ticker in tickers:
-        if ticker in tech_keywords:
-            counts["기술주"] += 1
-        if ticker in semiconductor_keywords:
-            counts["반도체"] += 1
-        if ticker in healthcare_keywords:
-            counts["헬스케어"] += 1
-        if ticker in finance_keywords:
-            counts["금융"] += 1
-        if ticker in energy_keywords:
-            counts["에너지"] += 1
-        if ticker in consumer_keywords:
-            counts["필수소비재"] += 1
 
-    dominant = max(counts, key=counts.get)
-
-    if counts[dominant] == 0:
-        return "현재 포트폴리오의 뚜렷한 섹터 편중은 제한적으로 보입니다."
-
-    return f"현재 포트폴리오는 {dominant} 비중이 상대적으로 높을 가능성이 있습니다."
+def _score_rule(rule: SectorRule, texts: Iterable[str]) -> int:
+    combined = " ".join(texts).lower()
+    return sum(1 for keyword in rule.keywords if keyword.lower() in combined)
 
 
-def _suggest_complementary_sector(tickers: List[str]) -> str:
-    """
-    현재 포트폴리오 편중을 보고,
-    보완용 섹터 후보를 한 줄 힌트로 제공합니다.
-    """
-    tech_keywords = {"AAPL", "MSFT", "NVDA", "AMD", "TSLA", "QQQ", "META", "GOOGL", "AMZN", "AVGO"}
-    semiconductor_keywords = {"NVDA", "AMD", "TSM", "AVGO", "QCOM", "MU", "INTC", "SOXX"}
-    healthcare_keywords = {"JNJ", "PFE", "MRK", "LLY", "ABBV", "UNH"}
-    finance_keywords = {"JPM", "BAC", "GS", "MS", "WFC", "C"}
-    energy_keywords = {"XOM", "CVX", "SLB", "COP"}
-
-    tech_count = sum(t in tech_keywords for t in tickers)
-    semi_count = sum(t in semiconductor_keywords for t in tickers)
-    healthcare_count = sum(t in healthcare_keywords for t in tickers)
-    finance_count = sum(t in finance_keywords for t in tickers)
-    energy_count = sum(t in energy_keywords for t in tickers)
-
-    if tech_count + semi_count >= 2:
-        return "보완용 섹터는 헬스케어, 필수소비재, 보험처럼 경기 방어적 성격의 산업을 우선 검토하세요."
-    if healthcare_count >= 2:
-        return "보완용 섹터는 반도체, 전력 인프라, 산업자동화처럼 구조적 성장 성격의 산업을 우선 검토하세요."
-    if finance_count >= 2:
-        return "보완용 섹터는 헬스케어 또는 전력 인프라처럼 경기 민감도를 낮출 수 있는 산업을 우선 검토하세요."
-    if energy_count >= 2:
-        return "보완용 섹터는 헬스케어 또는 반도체처럼 실적 동력이 다른 산업을 우선 검토하세요."
-
-    return "보완용 섹터는 헬스케어, 필수소비재, 전력 인프라, 산업자동화 중에서 분산 효과가 큰 방향으로 제시하세요."
+def _count_negative_hints(texts: Iterable[str]) -> int:
+    combined = " ".join(texts).lower()
+    return sum(1 for hint in NEGATIVE_HINTS if hint.lower() in combined)
 
 
-def _build_sector_context(user_portfolio: List[Dict[str, Any]]) -> str:
-    tickers = _extract_tickers(user_portfolio)
-    portfolio_bias = _infer_portfolio_bias(tickers)
-    complement_hint = _suggest_complementary_sector(tickers)
+def _build_sector_analysis(state: AgentState, facts: Sequence[str]) -> List[Dict[str, Any]]:
+    context = _build_context_texts(state, facts)
+    texts = (
+        context["facts_text"],
+        context["macro_text"],
+        context["risk_text"],
+        context["portfolio_text"],
+    )
 
-    holding_text = ", ".join(tickers) if tickers else "보유 종목 정보 없음"
+    scored = [
+        {
+            "sector": rule.name,
+            "score": _score_rule(rule, texts),
+            "thesis": rule.thesis,
+            "us_leaders": list(rule.us_leaders),
+            "kr_leaders": list(rule.kr_leaders),
+        }
+        for rule in SECTOR_RULES
+    ]
+
+    ranked = sorted(scored, key=lambda item: item["score"], reverse=True)
+    positive = [item for item in ranked if item["score"] > 0]
+    selected = positive[:2] if len(positive) >= 2 else ranked[:2]
+
+    negative_count = _count_negative_hints(texts)
+    risk_bias = "주의 강화" if negative_count >= 2 else "중립"
+
+    return [
+        {
+            **item,
+            "risk_bias": risk_bias,
+            "negative_hint_count": negative_count,
+            "investment_point": _make_investment_point(item["sector"], item["score"]),
+        }
+        for item in selected
+    ]
+
+
+def _make_investment_point(sector_name: str, score: int) -> str:
+    if score >= 4:
+        return f"{sector_name} 관련 팩트가 반복적으로 관측되어 상대 강도 신호가 가장 뚜렷하다."
+    if score >= 2:
+        return f"{sector_name} 관련 팩트가 여러 번 확인되어 주도 섹터 후보로 볼 수 있다."
+    return f"{sector_name} 관련 직접 팩트는 제한적이지만 현재 맥락에서 대안이 아닌 주도 후보로 검토할 만하다."
+
+
+def _serialize_analysis(analysis: Sequence[Dict[str, Any]]) -> str:
+    return json.dumps(list(analysis), ensure_ascii=False, indent=2)
+
+
+def _build_user_prompt(state: AgentState, facts: Sequence[str], analysis: Sequence[Dict[str, Any]]) -> str:
+    context = _build_context_texts(state, facts)
 
     return f"""
-[사용자 보유 종목]
-{holding_text}
+[사용자 포트폴리오]
+{context["portfolio_text"]}
 
-[포트폴리오 편중 추정]
-{portfolio_bias}
+[매크로 요약]
+{context["macro_text"]}
 
-[추천 방향 힌트]
-{complement_hint}
+[리스크 요약]
+{context["risk_text"]}
 
-[작성 지침]
-- 추천 섹터는 총 2개만 제시하세요.
-- 2개 섹터는 반드시 서로 성격이 달라야 합니다.
-- 하나는 포트폴리오 편중을 보완하는 섹터로 제시하세요.
-- 다른 하나는 구조적 성장 기대가 큰 섹터로 제시하세요.
-- 각 섹터마다 미국 대표 종목 2개, 한국 대표 종목 2개를 반드시 포함하세요.
-- 종목은 실제 대표 대형주 위주로 쓰세요.
+[수집된 facts]
+{context["facts_text"] if context["facts_text"] else "- 없음"}
+
+[구조화 분석 결과]
+{_serialize_analysis(analysis)}
+
+위 자료만 사용해서 알파 섹터 추천 파트를 작성하라.
+facts와 구조화 분석 결과에 없는 새로운 사실은 추가하지 마라.
+추천 섹터는 정확히 2개만 제시하라.
+각 섹터마다 미국 대표 종목 1~2개, 한국 대표 종목 1~2개를 반드시 포함하라.
 """
 
 
-# ==========================================================
-# 메인 노드
-# ==========================================================
-def alpha_node(state: AgentState) -> Dict[str, Any]:
-    """
-    독립형 Alpha 노드
-    - macro / risk / portfolio 결과를 참조하지 않음
-    - 사용자 보유 종목만 참고하여 신규 진입 유망 섹터 2개 추천
-    """
-    user_portfolio = state.get(StateKey.USER_PORTFOLIO, [])
-    if not isinstance(user_portfolio, list):
-        user_portfolio = []
-
-    context_text = _build_sector_context(user_portfolio)
-
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            ("system", ALPHA_SYSTEM_PROMPT),
-            ("human", "{context}"),
-        ]
+def _call_responses_api(prompt: str) -> str:
+    response = client.responses.create(
+        model=OPENAI_MODEL,
+        input=[
+            {
+                "role": "developer",
+                "content": [
+                    {
+                        "type": "input_text",
+                        "text": (
+                            "너는 AlphaInvest의 알파 섹터 담당 애널리스트다. "
+                            "facts와 analysis만 사용해 투자 리포트 문장을 다듬어라. "
+                            "새로운 사실, 수치, 기사, 종목은 임의로 만들지 마라."
+                        ),
+                    }
+                ],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "input_text", "text": prompt}],
+            },
+        ],
     )
-
-    llm = ChatOpenAI(
-        model=ModelConfig.DEFAULT_LLM_MODEL,
-        temperature=ModelConfig.DEFAULT_TEMPERATURE,
-    )
-
-    chain = prompt | llm
-    response = chain.invoke({"context": context_text})
-
-    alpha_report = _safe_text(getattr(response, "content", ""))
-
-    return {
-        StateKey.ALPHA_RESULT: alpha_report
-    }
+    return response.output_text.strip()
 
 
-# ==========================================================
-# 로컬 테스트 실행 블록
-# ==========================================================
-if __name__ == "__main__":
-    print("alpha.py loaded successfully")
+def _build_fallback_report(analysis: Sequence[Dict[str, Any]]) -> str:
+    lines = ["## 3. 🚀 AI 인사이트: 신규 진입 추천 섹터 Top 2", ""]
 
-    test_state = {
-        StateKey.USER_PORTFOLIO: [
-            {"ticker": "AAPL"},
-            {"ticker": "NVDA"},
-            {"ticker": "MSFT"},
-        ]
-    }
+    for item in analysis:
+        us_names = ", ".join(item["us_leaders"])
+        kr_names = ", ".join(item["kr_leaders"])
+        lines.extend(
+            [
+                f'- **[추천 섹터: {item["sector"]}]**',
+                f'  - **논리적 배경:** {item["thesis"]}',
+                f'  - **투자 포인트:** {item["investment_point"]}',
+                f"  - **미국 대표 종목:** {us_names}",
+                f"  - **한국 대표 종목:** {kr_names}",
+                "",
+            ]
+        )
+
+    return "\n".join(lines).strip()
+
+
+def _build_alpha_messages(report_text: str) -> List[Any]:
+    return [
+        HumanMessage(content="알파 섹터 추천 파트를 생성한다."),
+        AIMessage(content=report_text),
+    ]
+
+
+# =========================================================
+# Public node
+# =========================================================
+def alpha_agent(state: AgentState) -> Dict[str, Any]:
+    """
+    Alpha 섹터 추천 노드.
+    - fetch.py가 수집한 최신 facts를 입력으로 받는다.
+    - facts / macro / risk / portfolio를 조합해 구조화 분석을 수행한다.
+    - Responses API는 문장 정리만 담당한다.
+    - 기존 State 스키마의 alpha_messages, alpha_result만 갱신한다.
+    """
+    facts = _fetch_alpha_facts_from_adapter(state)
+    analysis = _build_sector_analysis(state, facts)
+    prompt = _build_user_prompt(state, facts, analysis)
 
     try:
-        result = alpha_node(test_state)
-        print("\n[alpha_node 실행 결과]\n")
-        print(result.get(StateKey.ALPHA_RESULT, "결과 없음"))
-    except Exception as e:
-        print("\n[실행 중 오류 발생]")
-        print(type(e).__name__, e)
+        report_text = _call_responses_api(prompt)
+    except Exception:
+        report_text = _build_fallback_report(analysis)
+
+    return {
+        StateKey.ALPHA_MESSAGES: _build_alpha_messages(report_text),
+        StateKey.ALPHA_RESULT: report_text,
+    }
+
+
+# =========================================================
+# Manual test
+# =========================================================
+if __name__ == "__main__":
+    from agents.state import get_initial_state
+
+    sample_state = get_initial_state(
+        user_portfolio=[
+            {"ticker": "TSLA", "weight": 0.35},
+            {"ticker": "SOXL", "weight": 0.25},
+        ]
+    )
+    sample_state[StateKey.MACRO_RESULT] = "금리 경로 불확실성은 남아 있지만 AI·전력 투자 관련 설비 지출은 상대적으로 견조하다."
+    sample_state[StateKey.RISK_RESULT] = "가격 경쟁이 심한 전기차 단일 베팅은 주의가 필요하다."
+
+    result = alpha_agent(sample_state)
+
+    print("\n" + "=" * 80)
+    print("[ALPHA RESULT]")
+    print(result[StateKey.ALPHA_RESULT])
+    print("=" * 80 + "\n")
