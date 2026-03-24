@@ -85,19 +85,16 @@ THEME_DETECTION_PROMPT = (
     "{\n"
     '  "theme_name": "테마명 (예: AI 인프라, 비만치료제, 전력망 인프라)",\n'
     '  "theme_type": "growth | defensive | cyclical | speculative",\n'
-    '  "theme_keywords": ["구조적 변화를 설명하는 핵심 키워드 4~8개"],\n'
-    '  "representative_etfs": ["(선택) 관련 테마 ETF 티커 0~2개, 실제 존재하는 것만"],\n'
+    '  "representative_etfs": ["관련 테마 ETF 티커 1~2개, 실제 존재하는 것만"],\n'
     '  "leader_stocks": ["대장주 티커 2~3개"],\n'
     '  "structural_driver": "구조적 변화 요인 1문장",\n'
     '  "sentiment": "positive | negative | mixed"\n'
     "}\n\n"
     "규칙:\n"
     "1. 단순 언급량이 아닌 구조적 변화를 동반한 테마만 추출하라.\n"
-    "2. theme_keywords는 반드시 채워라. 단순 업종명만 쓰지 말고 구조적 드라이버 키워드를 포함하라.\n"
-    "3. theme_name은 ETF 티커명이 아닌 산업/서사 중심 이름으로 작성하라.\n"
-    "4. ETF 티커는 선택 항목이다. 불확실하거나 부적절하면 빈 배열로 둬라.\n"
-    "5. 최소 2개, 최대 5개의 테마를 추출하라.\n"
-    "6. 반드시 유효한 JSON만 출력하라."
+    "2. ETF 티커는 실제 존재하는 것만 사용하라. 불확실하면 빈 배열로 두어라.\n"
+    "3. 최소 2개, 최대 5개의 테마를 추출하라.\n"
+    "4. 반드시 유효한 JSON만 출력하라."
 )
 
 # ─── 상수 ─────────────────────────────────────────────────────
@@ -700,12 +697,10 @@ def _extract_themes(
         for t in themes:
             t.setdefault("theme_name", "Unknown")
             t.setdefault("theme_type", "growth")
-            t.setdefault("theme_keywords", [])
             t.setdefault("representative_etfs", [])
             t.setdefault("leader_stocks", [])
             t.setdefault("structural_driver", "")
             t.setdefault("sentiment", "mixed")
-            t["theme_name"] = _normalize_theme_name(t)
         return themes[:5]
     except Exception:
         return []
@@ -717,8 +712,8 @@ def _enrich_theme_signals(
     """테마별 대표 ETF/종목의 시장 신호(RSI, MA 이격도 포함)를 수집한다."""
     all_tickers: List[str] = []
     for t in themes:
-        all_tickers.extend(t.get("leader_stocks", []))
         all_tickers.extend(t.get("representative_etfs", []))
+        all_tickers.extend(t.get("leader_stocks", []))
     unique = list(dict.fromkeys(all_tickers))[:15]
     if not unique:
         return {}
@@ -735,25 +730,6 @@ _NARRATIVE_NEGATIVE_KW = frozenset({
     "failure", "miss", "downgrade", "default", "fraud", "investigation",
     "decline", "slump", "plunge", "collapse", "warning", "concern",
 })
-
-_KNOWN_ETF_TICKERS = frozenset({
-    "SPY", "QQQ", "DIA", "IWM", "XLF", "XLK", "XLE", "XLI", "XLV", "XLY",
-    "XLP", "XLU", "XLB", "XLRE", "SMH", "SOXX", "ARKK", "TAN", "ICLN",
-    "BOTZ", "LIT", "HYG", "JNK", "TLT", "GLD", "SLV",
-})
-
-
-def _normalize_theme_name(theme: Dict[str, Any]) -> str:
-    """ETF 티커형 테마명을 키워드 기반 산업/서사명으로 보정한다."""
-    name = str(theme.get("theme_name", "")).strip()
-    if not name:
-        return "Unknown"
-    upper = name.upper()
-    if upper in _KNOWN_ETF_TICKERS or re.fullmatch(r"[A-Z]{2,5}", upper):
-        keywords = theme.get("theme_keywords", [])
-        if keywords:
-            return " / ".join(keywords[:3])
-    return name
 
 
 def _check_narrative_damage(theme_name: str) -> bool:
@@ -775,9 +751,7 @@ def _is_technically_overheated(
     signals: Dict[str, Dict[str, Any]],
 ) -> bool:
     """테마 대표 종목의 RSI > 75 또는 5MA 이격도 > 10% 여부를 확인한다."""
-    leaders = theme.get("leader_stocks", [])
-    etfs = theme.get("representative_etfs", [])
-    tickers = leaders if leaders else etfs
+    tickers = theme.get("representative_etfs", []) + theme.get("leader_stocks", [])
     for t in tickers:
         sig = signals.get(t, {})
         if "error" in sig:
@@ -864,7 +838,6 @@ def _format_theme_evidence(
     for t in themes:
         decision = t.get("decision", "WATCH")
         flags = ", ".join(t.get("risk_flags", [])) or "없음"
-        keywords = ", ".join(t.get("theme_keywords", [])) or "N/A"
         etfs = ", ".join(t.get("representative_etfs", [])) or "N/A"
         leaders = ", ".join(t.get("leader_stocks", [])) or "N/A"
 
@@ -881,7 +854,6 @@ def _format_theme_evidence(
         lines.append(
             f"\n  테마: {t.get('theme_name', '?')} [{decision}]\n"
             f"  유형: {t.get('theme_type', '?')}\n"
-            f"  키워드: {keywords}\n"
             f"  구조적 동인: {t.get('structural_driver', '?')}\n"
             f"  위험 플래그: {flags}\n"
             f"  대표 ETF: {etfs}\n"
@@ -950,8 +922,6 @@ def _has_required_risk_format(text: str) -> bool:
 
     for m in matches:
         related = m.group(3)
-        if "ETF" in related.upper():
-            return False
         if len(_extract_tickers(related)) < 2:
             return False
         reason = m.group(4).strip()
@@ -1083,10 +1053,9 @@ def risk_node(state: AgentState) -> Dict[str, Any]:
                 "- [근거 5]\n\n"
                 "중요 제약:\n"
                 "- 총 3개를 반드시 작성할 것 (1위, 2위, 3위).\n"
-                "- 각 순위의 관련종목은 정확히 2개만 작성할 것(ETF 금지).\n"
+                "- 각 순위의 관련종목은 정확히 2개만 작성할 것.\n"
                 "- 리스크 근거는 각 순위 블록의 마지막(3번)에 배치할 것.\n"
                 "- 각 순위의 리스크 근거는 줄바꿈 기준 최소 5줄로 작성할 것.\n"
-                "- 위험섹터/테마명은 ETF 티커명 대신 산업/서사 중심 이름으로 작성할 것.\n"
                 "CRITICAL 판정을 받은 테마는 반드시 최우선으로 경고하세요.\n"
                 "WATCH 판정 테마는 알파 헌터 노드 참고용으로만 간략 언급하세요.",
             ),
