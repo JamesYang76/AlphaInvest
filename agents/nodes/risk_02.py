@@ -354,7 +354,8 @@ def _compute_rsi_from_list(prices: List[float], period: int = 14) -> Optional[fl
 
 
 def _compute_ma_divergence_from_list(
-    prices: List[float], period: int = 5,
+    prices: List[float],
+    period: int = 5,
 ) -> Optional[float]:
     """순수 리스트 기반 이동평균 이격도(%) 계산 (API 폴백용)."""
     if len(prices) < period:
@@ -675,16 +676,14 @@ def _fetch_theme_news() -> List[Dict[str, str]]:
 
 
 def _extract_themes(
-    articles: List[Dict[str, str]], llm: Any,
+    articles: List[Dict[str, str]],
+    llm: Any,
 ) -> List[Dict[str, Any]]:
     """뉴스에서 구조적 변화를 동반한 투자 테마를 추출한다."""
     if not articles:
         return []
 
-    text = "\n\n".join(
-        f"[기사 {i + 1}] {a['title']}\n{a['content']}"
-        for i, a in enumerate(articles)
-    )
+    text = "\n\n".join(f"[기사 {i + 1}] {a['title']}\n{a['content']}" for i, a in enumerate(articles))
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", THEME_DETECTION_PROMPT),
@@ -725,11 +724,28 @@ def _enrich_theme_signals(
     return {s["ticker"]: s for s in signals}
 
 
-_NARRATIVE_NEGATIVE_KW = frozenset({
-    "risk", "crash", "bubble", "overvalued", "regulation", "ban",
-    "failure", "miss", "downgrade", "default", "fraud", "investigation",
-    "decline", "slump", "plunge", "collapse", "warning", "concern",
-})
+_NARRATIVE_NEGATIVE_KW = frozenset(
+    {
+        "risk",
+        "crash",
+        "bubble",
+        "overvalued",
+        "regulation",
+        "ban",
+        "failure",
+        "miss",
+        "downgrade",
+        "default",
+        "fraud",
+        "investigation",
+        "decline",
+        "slump",
+        "plunge",
+        "collapse",
+        "warning",
+        "concern",
+    }
+)
 
 
 def _check_narrative_damage(theme_name: str) -> bool:
@@ -993,24 +1009,19 @@ def risk_node(state: AgentState) -> Dict[str, Any]:
     for c in clusters:
         c["risk_score"] = _score_cluster(c, market_signals, macro_values)
     clusters.sort(key=lambda x: x["risk_score"], reverse=True)
-    clusters = [
-        c for c in clusters
-        if c.get("news_count", 0) >= 2 or len(c.get("tickers", [])) >= 2
-    ]
+    clusters = [c for c in clusters if c.get("news_count", 0) >= 2 or len(c.get("tickers", [])) >= 2]
 
     # ── Step 5b: 테마 하방 리스크 판정 (3-기준 스코어링) ──
     scored_themes = _score_themes(themes, theme_signals, macro_values)
 
     # ── Step 6: 하이브리드 evidence 포맷 → LLM 경보 생성 ──
     cluster_evidence = _format_clusters_evidence(
-        clusters, market_signals, macro.get("summary", ""),
+        clusters,
+        market_signals,
+        macro.get("summary", ""),
     )
     theme_evidence = _format_theme_evidence(scored_themes, theme_signals)
-    combined_evidence = (
-        f"{cluster_evidence}\n\n{theme_evidence}"
-        if theme_evidence
-        else cluster_evidence
-    )
+    combined_evidence = f"{cluster_evidence}\n\n{theme_evidence}" if theme_evidence else cluster_evidence
 
     prompt = ChatPromptTemplate.from_messages(
         [
