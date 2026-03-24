@@ -14,7 +14,6 @@ from langchain_openai import ChatOpenAI
 
 from agents.constants import AgentName, ModelConfig, StateKey
 from agents.state import AgentState
-from utils.helpers import format_feedback
 
 try:
     from dotenv import load_dotenv
@@ -932,23 +931,12 @@ def _format_theme_evidence(
 # ═══════════════════════════════════════════════════════════════
 
 
-# GP 피드백이 risk 대상일 때만 사유를 추출
-def _get_feedback_text(state: AgentState) -> str:
-    feedback = state.get(StateKey.GP_FEEDBACK, {})
-    if feedback.get("target_node") != AgentName.RISK:
-        return "현재 GP 피드백 없음"
-    return feedback.get("feedback_reason", "현재 GP 피드백 없음")
-
-
 # LLM 미사용/실패 시 최소 출력 계약을 유지하는 폴백
 def _build_fallback_result(state: AgentState) -> str:
-    fb = _get_feedback_text(state)
-    suffix = "" if fb == "현재 GP 피드백 없음" else f" GP 지적: '{fb}'"
     return (
         "현재 FRED 금리 환경과 시장 데이터를 종합하면 "
         "고금리 부담이 큰 섹터부터 우선 회피해야 합니다. "
         "구체적 데이터 확보 후 재분석이 필요합니다."
-        f"{suffix}"
     )
 
 
@@ -1004,14 +992,12 @@ def _generate_risk_text(
     chain: Any,
     evidence: str,
     macro_result: str,
-    feedback_text: str,
     retry_hint: str,
 ) -> str:
     resp = chain.invoke(
         {
             "evidence": evidence,
             "macro_result": macro_result,
-            "feedback_text": feedback_text,
             "retry_hint": retry_hint,
             "today": datetime.now().strftime("%Y-%m-%d"),
         }
@@ -1026,7 +1012,6 @@ def _generate_risk_text(
 # ═══════════════════════════════════════════════════════════════
 def risk_node(state: AgentState) -> Dict[str, Any]:
     macro_result = state.get(StateKey.MACRO_RESULT, "매크로 요약 없음")
-    feedback_text = format_feedback(state, AgentName.RISK)
 
     if not os.getenv("OPENAI_API_KEY"):
         return {StateKey.RISK_RESULT: _build_fallback_result(state)}
@@ -1079,7 +1064,6 @@ def risk_node(state: AgentState) -> Dict[str, Any]:
                 "작성 기준일: {today}\n\n"
                 "기존 매크로 요약:\n{macro_result}\n\n"
                 "위험 군집 + 테마 분석 결과:\n{evidence}\n\n"
-                "검수 피드백:\n{feedback_text}\n\n"
                 "추가 지시:\n{retry_hint}\n\n"
                 "위 데이터를 기반으로 아래 형식에 맞춰 리스크 경보를 작성하세요.\n"
                 "형식은 반드시 1위~3위까지 반복한다:\n\n"
@@ -1128,7 +1112,6 @@ def risk_node(state: AgentState) -> Dict[str, Any]:
             chain=chain,
             evidence=combined_evidence,
             macro_result=macro_result,
-            feedback_text=feedback_text,
             retry_hint=(
                 "1위~3위 반복 형식을 엄격히 지켜라. "
                 "각 순위는 1.위험섹터/테마 2.관련종목 3.리스크 근거 순서를 따르라. "
@@ -1142,7 +1125,6 @@ def risk_node(state: AgentState) -> Dict[str, Any]:
                 chain=chain,
                 evidence=combined_evidence,
                 macro_result=macro_result,
-                feedback_text=feedback_text,
                 retry_hint=(
                     "직전 출력이 형식 기준을 만족하지 않았다. "
                     "반드시 1위/2위/3위 세 블록을 작성하고, "

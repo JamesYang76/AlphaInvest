@@ -114,19 +114,6 @@ def alpha_node(state: AgentState) -> Dict[str, Any]:
     """
     llm = get_llm(temperature=0.0)
 
-    # 0. GP 피드백 확인
-    feedback = state.get(StateKey.GP_FEEDBACK, {})
-    gp_feedback = ""
-    if feedback.get("target_node") == AgentName.ALPHA:
-        reason = feedback.get("feedback_reason", "")
-        gp_feedback = dedent(f"""
-            [수석 애널리스트 피드백]
-            {reason}
-
-            이전 분석이 위와 같은 이유로 반려되었습니다.
-            이번에는 이 점을 보완하여 다시 작성해 주세요.
-        """).strip()
-
     # 1. 뉴스에서 실시간 5대 테마 발굴
     current_rules = _discover_current_themes(llm)
 
@@ -172,7 +159,6 @@ def alpha_node(state: AgentState) -> Dict[str, Any]:
         2. 발굴된 테마들의 투자 논거와 최신 시장 상황을 정교하게 엮으세요.
         3. 미국/한국 대표 종목을 명확히 명시하세요.
         4. 정중하고 전문적인 톤(PB 리포트 스타일)을 유지하세요.
-        {gp_feedback}
     """).strip()
 
     try:

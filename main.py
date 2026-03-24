@@ -33,11 +33,16 @@ def main():
     final_state = initial_state
     for step in app.stream(initial_state, stream_mode="updates"):
         for node_name, updated_values in step.items():
+            if updated_values is None:
+                continue
+
             logger.info(f"--- [ {node_name} ] 작업 완료 ---")
             final_state.update(updated_values)  # 상태 누적 업데이트
 
-            # 실시간 진행 상황 요약 (for문 없이 리스트 내포와 왈러스 연산자를 이용한 완전 선언적 처리)
-            [action(val) for key, val in updated_values.items() if (action := log_actions.get(key))]
+            # 실시간 진행 상황 요약
+            for key, val in updated_values.items():
+                if action := log_actions.get(key):
+                    action(val)
 
     # 3. 결과 출력
     logger.info("✅ 모든 분석 생중계가 완료되었습니다!")
