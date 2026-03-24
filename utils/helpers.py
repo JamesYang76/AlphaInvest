@@ -1,3 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import Any, Callable, Dict, List, TypeVar
+
 from utils.logger import get_logger
 
 logger = get_logger("utils.helpers")
@@ -26,3 +29,70 @@ def export_graph_visualization(app) -> None:
         logger.info("아키텍처 다이어그램이 'graph_flow.md' 및 'graph_flow.png'에 모두 산출되었습니다.")
     except Exception as e:
         logger.warning(f"PNG 이미지 산출 중 에러 발생 (인터넷 API 연결 필요): {e}")
+
+
+# ─── 병렬 처리 유틸리티 (ThreadPool 기반) ───
+
+T = TypeVar("T")
+
+
+def parallel_map_dict(
+    items: Dict[str, T],
+    worker: Callable[[T], Any],
+    max_workers: int,
+) -> Dict[str, Any]:
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        fmap = {pool.submit(worker, v): k for k, v in items.items()}
+        return {fmap[f]: f.result() for f in as_completed(fmap)}
+
+
+def parallel_map_list(
+    items: List[T],
+    worker: Callable[[T], Any],
+    max_workers: int,
+) -> List[Any]:
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        idx_map = {pool.submit(worker, it): i for i, it in enumerate(items)}
+        results: List[Any] = [None] * len(items)
+        for f in as_completed(idx_map):
+            results[idx_map[f]] = f.result()
+    return results
+
+
+def parse_llm_json(text: str) -> List[Dict[str, Any]]:
+    """LLM 응답 마크다운 블록에서 JSON을 추출하고 파싱합니다."""
+    import json
+    import re
+
+    cleaned = re.sub(r"```(?:json)?\s*", "", text).strip().rstrip("`")
+    try:
+        parsed = json.loads(cleaned)
+        return parsed if isinstance(parsed, list) else [parsed]
+    except json.JSONDecodeError:
+        match = re.search(r"\[.*]", cleaned, re.DOTALL)
+        if match:
+            try:
+                return json.loads(match.group())
+            except json.JSONDecodeError:
+                pass
+    return []
+
+
+def format_feedback(state: dict, node_name: str) -> str:
+    """수석 애널리스트(GP)의 피드백을 현재 노드에 맞춰 포맷팅합니다."""
+    from agents.constants import StateKey
+
+    feedback = state.get(StateKey.GP_FEEDBACK, {})
+    if not feedback:
+        return ""
+
+    target = feedback.get("target_node")
+    reason = feedback.get("feedback_reason", "")
+    if not reason:
+        return ""
+
+    if target == node_name:
+        return f"\n[수석 애널리스트 피드백]\n" f"{reason}\n" "위 사유로 반려되었습니다. 최우선적으로 이를 무조건 반영하여 보완해 주세요.\n"
+    else:
+        # 타 노드 피드백도 참고용으로 제공 가능 (필요 시)
+        return f"\n[참고 - 타 분석 유닛({target}) 피드백]: {reason}\n"

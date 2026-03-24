@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, List
 
 import yfinance as yf
 
@@ -41,6 +41,8 @@ def get_stock_info(ticker: str, name: str = "") -> Dict[str, Any]:
         news = yf_stock.news[:3]
         news_snippet = "\n".join([f"- {n.get('title')}" for n in news]) if news else news_snippet
         description = info.get("longBusinessSummary", info.get("description", description))
+        sector = info.get("sector", "N/A")
+        industry = info.get("industry", "N/A")
 
         return {
             "ticker": ticker,
@@ -63,6 +65,42 @@ def get_stock_info(ticker: str, name: str = "") -> Dict[str, Any]:
             "news": news_snippet,
             "description": description[:300] + "...",
             "is_kr": is_kr,
+            "sector": sector,
+            "industry": industry,
         }
     except Exception as e:
         return {"ticker": ticker, "error": f"데이터 수집 중 오류: {str(e)}"}
+
+
+def enrich_portfolio_data(user_portfolio: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    사용자의 포트폴리오 정보를 바탕으로 실시간 시세 및 지표를 추가하고 수익률을 계산합니다.
+    """
+    enriched_portfolio = []
+    for stock in user_portfolio:
+        ticker = stock.get("ticker")
+        avg_price = stock.get("avg_price", 0)
+
+        # 1. 실시간 데이터 수집
+        info = get_stock_info(ticker)
+
+        # 2. 수익률 및 평단가 정보 보강
+        try:
+            # current_price 문자열에서 쉼표 제거 후 float 변환 (get_stock_info에서 포맷팅된 결과 대응)
+            raw_price_str = info.get("current_price", "0").replace(",", "")
+            current_price = float(raw_price_str)
+
+            if avg_price > 0:
+                profit_rate = ((current_price - avg_price) / avg_price) * 100
+                info["avg_price"] = f"{avg_price:,.0f}"
+                info["profit_rate"] = f"{profit_rate:+.2f}%"
+            else:
+                info["avg_price"] = "N/A"
+                info["profit_rate"] = "N/A"
+        except (ValueError, TypeError, Exception):
+            info["avg_price"] = f"{avg_price:,.0f}" if isinstance(avg_price, (int, float)) else "N/A"
+            info["profit_rate"] = "계산 불가"
+
+        enriched_portfolio.append(info)
+
+    return enriched_portfolio

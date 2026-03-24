@@ -14,6 +14,7 @@ from langchain_openai import ChatOpenAI
 
 from agents.constants import AgentName, ModelConfig, StateKey
 from agents.state import AgentState
+from utils.helpers import format_feedback
 
 try:
     from dotenv import load_dotenv
@@ -282,9 +283,7 @@ def _build_macro_context() -> Dict[str, Any]:
     parts = [
         f"연방기금금리 {values['fed_funds_rate']:.2f}%" if values["fed_funds_rate"] else "연방기금금리 데이터 없음",
         f"미국채 10년물 {values['ten_year_yield']:.2f}%" if values["ten_year_yield"] else "10년물 데이터 없음",
-        f"하이일드 스프레드 {values['high_yield_spread']:.2f}"
-        if values["high_yield_spread"]
-        else "HY스프레드 데이터 없음",
+        f"하이일드 스프레드 {values['high_yield_spread']:.2f}" if values["high_yield_spread"] else "HY스프레드 데이터 없음",
     ]
     return {"summary": ", ".join(parts), "values": values}
 
@@ -590,11 +589,7 @@ def _score_cluster(
     cnt_factor = min(cluster.get("news_count", 0) / 3.0, 1.0)
     news_score = neg * 60 + cnt_factor * 40
 
-    returns = [
-        market_signals[t].get("return_20d", 0)
-        for t in cluster.get("tickers", [])
-        if t in market_signals and "error" not in market_signals[t]
-    ]
+    returns = [market_signals[t].get("return_20d", 0) for t in cluster.get("tickers", []) if t in market_signals and "error" not in market_signals[t]]
     market_score = min(max(-sum(returns) / max(len(returns), 1) * 5, 0), 100) if returns else 30
 
     kw = cluster.get("risk_keywords", []) + cluster.get("industry_terms", [])
@@ -1031,7 +1026,7 @@ def _generate_risk_text(
 # ═══════════════════════════════════════════════════════════════
 def risk_node(state: AgentState) -> Dict[str, Any]:
     macro_result = state.get(StateKey.MACRO_RESULT, "매크로 요약 없음")
-    feedback_text = _get_feedback_text(state)
+    feedback_text = format_feedback(state, AgentName.RISK)
 
     if not os.getenv("OPENAI_API_KEY"):
         return {StateKey.RISK_RESULT: _build_fallback_result(state)}
@@ -1043,9 +1038,7 @@ def risk_node(state: AgentState) -> Dict[str, Any]:
 
     # ── Step 1: 데이터 수집 (기존 위험 뉴스 + 테마 뉴스) ──
     macro = _build_macro_context()
-    articles = _fetch_news_articles(
-        "US stock market sector risk downgrade credit default earnings miss refinancing pressure 2026"
-    )
+    articles = _fetch_news_articles("US stock market sector risk downgrade credit default earnings miss refinancing pressure 2026")
     theme_articles = _fetch_theme_news()
 
     # ── Step 2: 위험 엔티티 추출 + 투자 테마 추출 ──
@@ -1164,4 +1157,4 @@ def risk_node(state: AgentState) -> Dict[str, Any]:
     except Exception as err:
         result = f"{_build_fallback_result(state)} LLM 연결 오류: {err}"
 
-    return {StateKey.RISK_RESULT: result}
+    return {StateKey.RISK_RESULT: result, StateKey.CURRENT_REPORT: result, "last_node": AgentName.RISK}

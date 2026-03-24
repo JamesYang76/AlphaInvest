@@ -15,9 +15,11 @@ class StateKey:
 
     # 2. 결과물(Result) 키
     MACRO_RESULT: Final = "macro_result"
+    MACRO_DATA: Final = "macro_data"  # 💡 원시 거시 지표 데이터 저장용
     RISK_RESULT: Final = "risk_result"
     ALPHA_RESULT: Final = "alpha_result"
     PORTFOLIO_RESULT: Final = "portfolio_result"
+    CURRENT_REPORT: Final = "current_report"  # 💡 GP 심사용 공통 리포트 키
     FINAL_REPORT: Final = "final_report"
 
     # 3. 제어 및 카운트
