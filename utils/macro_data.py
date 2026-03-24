@@ -1,4 +1,5 @@
 import os
+from typing import List
 
 from fredapi import Fred
 from tavily import TavilyClient
@@ -42,19 +43,28 @@ def get_macro_context() -> str:
     return macro_context.strip() if macro_context else "현재 수집된 시황 정보가 없습니다."
 
 
-def get_sector_context() -> str:
+def get_sector_context(tickers: List[str] = None) -> str:
     """
-    Tavily Search를 이용하여 현재 주도 섹터(Alpha) 정보를 수집합니다.
+    Tavily Search를 이용하여 현재 주도 섹터(Alpha) 및 내 종목 관련 섹터 정보를 수집합니다.
     """
     tavily_api_key = os.getenv("TAVILY_API_KEY")
 
     if not tavily_api_key:
         return "TAVILY_API_KEY가 설정되지 않았습니다."
 
+    # 1. 동적 쿼리 생성
+    # 기본: 현재 가장 뜨거운 주도주 섹터 Top 2 및 트렌드 검색
+    query = "current top 2 hottest investment leading sectors, sector rotation alpha"
+
+    # 추가: 내 종목 섹터 전망 포함
+    if tickers:
+        joined_tickers = ", ".join(tickers[:3])  # 너무 길면 검색 품질이 떨어지므로 3개까지만
+        query += f", investment outlook for industries related to {joined_tickers}"
+
     try:
         tavily = TavilyClient(api_key=tavily_api_key)
         search_result = tavily.search(
-            query="current leading investment sectors, AI, energy infrastructure trends, sector rotation",
+            query=query,
             search_depth="advanced",
             max_results=3,
         )
