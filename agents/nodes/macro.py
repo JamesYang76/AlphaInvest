@@ -1,53 +1,107 @@
 import os
 from typing import Any, Dict
 
+from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_openai import ChatOpenAI
 
-from agents.constants import ModelConfig, StateKey
+from agents.constants import StateKey
 from agents.state import AgentState
+from data.fetchers import fetch_macro_data, fetch_news, get_llm
+
+# .env 파일에서 환경 변수 로드
+load_dotenv()
 
 # ==========================================
 # 🧠 시스템 프롬프트 (페르소나 및 역할 정의)
 # ==========================================
-MACRO_SYSTEM_PROMPT = """당신은 월스트리트 20년 경력의 수석 거시 경제 분석가입니다.
-입수된 경제 데이터와 뉴스를 융합하여, 투자 전략에 즉시 반영할 수 있는 '핵심 시황 요약'을 3문장 이내로 작성하세요.
-절대 장황하게 쓰지 말고, 단호하고 확신에 찬 전문가의 어조를 유지해야 합니다."""
+MACRO_SYSTEM_PROMPT = """당신은 글로벌 거시경제 전문 애널리스트입니다.
+제공된 거시경제 지표와 최신 뉴스를 분석하여 현재 투자 환경을 날카롭게 진단해 주세요.
+절대 장황하게 쓰지 말고, 전문가다운 통찰력을 담아 분석 내용을 요약해야 합니다.
+
+분석은 다음 형식을 반드시 지켜주세요:
+## 거시경제 환경 요약
+1. **현재 상황**: (2-3줄)
+2. **투자자에게 시사하는 점**: (2-3줄)
+3. **주요 리스크 요인**: (불릿 3개)
+"""
 
 
 def macro_node(state: AgentState) -> Dict[str, Any]:
-    # API 키 여부 사전 체크 (장애 원천 차단)
-    if not os.getenv("OPENAI_API_KEY"):
-        return {StateKey.MACRO_RESULT: "LLM 연결 실패: .env 파일에 OPENAI_API_KEY를 먼저 설정해주세요."}
+    print("\n🌐 [Phase 1] 거시경제 분석 시작...")
 
-    # 💡 1. 모델 세팅 (분석의 일관성을 위해 온도는 0에 가깝게)
-    llm = ChatOpenAI(model=ModelConfig.DEFAULT_LLM_MODEL, temperature=ModelConfig.DEFAULT_TEMPERATURE)
+    # ① 실시간 데이터 수집 (지표 및 뉴스)
+    macro_data = fetch_macro_data()
+    news = fetch_news("Federal Reserve inflation economic outlook 2025")
+    #데이터 수집 모듈 fetchers.py 가 data 안에 만들어져 있음
 
-    # 💡 2. 프롬프트 조립 (System과 User 역할의 완벽한 분리)
+    # ② LLM 설정 (분석의 일관성을 위해 온도는 낮게 설정)
+    llm = get_llm(temperature=0.3)
+
+    # ③ 프롬프트 조립 (System과 User 역할의 분리)
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", MACRO_SYSTEM_PROMPT),
-            ("user", "오늘 분석할 경제 데이터 및 주요 속보입니다:\n{data}"),
+            (
+                "user",
+                """아래 경제 지표와 뉴스를 분석하여 투자 환경을 요약해주세요.
+
+[거시경제 지표 (FRED & yfinance)]
+- 기준금리: {fed_rate}
+- CPI (인플레이션): {cpi}
+- 실업률: {unemployment}
+- 달러 인덱스: {dxy}
+- VIX (공포지수): {vix}
+- S&P500 추세: {sp500_trend}
+
+[최신 뉴스 (Tavily)]
+{news_data}
+""",
+            ),
         ]
     )
 
-    # 💡 3. 체인 구축 (Prompt 객체와 LLM 객체 연결)
+    # ④ 체인 구축 및 실행
     chain = prompt | llm
-
-    # [주의] 지금은 예제용 가짜 데이터(Dummy)를 하드코딩하지만,
-    # 실제 노드 구현 시에는 Tavily API 뉴스 검색 결과나 외부 경제 API 지표를 주입합니다.
-    dummy_input_data = (
-        "어젯밤 미국 연준(Fed)이 기준 금리를 3연속 동결했으며, 점도표 상 연내 인하 가능성을 배제했습니다. "
-        "동시에 엔비디아 등 대형 기술주의 3분기 가이던스가 시장 예상치를 크게 상회했습니다."
-    )
 
     try:
         # LLM에게 추론(invoke) 지시 및 결과 받기
-        response = chain.invoke({"data": dummy_input_data})
+        response = chain.invoke(
+            {
+                "fed_rate": macro_data.get("fed_rate", "N/A"),
+                "cpi": macro_data.get("cpi", "N/A"),
+                "unemployment": macro_data.get("unemployment", "N/A"),
+                "dxy": macro_data.get("dxy", "N/A"),
+                "vix": macro_data.get("vix", "N/A"),
+                "sp500_trend": macro_data.get("sp500_trend", "N/A"),
+                "news_data": news,
+            }
+        )
         result_text = response.content
+        print("  ✅ Phase 1 분석 완료")
+        print("\n--- [거시경제 분석 결과] ---")
+        print(result_text)
+        print("-" * 30)
     except Exception as e:
-        # API 인증 실패나 타임아웃 방어 로직 (장애가 나도 파이프라인이 죽지 않도록 방어)
-        result_text = f"LLM 연결 중 오류 발생 (환경 변수에 OPENAI_API_KEY 세팅 필요): {str(e)}"
+        # 장애가 나도 파이프라인이 죽지 않도록 방어
+        result_text = f"LLM 연결 중 오류 발생: {str(e)}"
 
-    # 💡 4. 규칙에 따라 정확하게 상태(State) 반환
-    return {StateKey.MACRO_RESULT: result_text}
+    # ⑤ 상태(State) 업데이트 결과 반환
+    return {
+        StateKey.MACRO_RESULT: result_text,
+        "current_phase": "macro_analysis",
+        "retry_count": 0,
+    }
+
+
+if __name__ == "__main__":
+    # 포트폴리오 정보 없이, 빈 상태(state)로 테스트 (거시 경제 전문 분석 컨셉)
+    test_state = {}
+
+    print("\n🚀 [단독 테스트] 거시 경제 전문 분석 실행 중...")
+    result = macro_node(test_state)
+
+    print("\n" + "=" * 50)
+    print("📊 최종 거시 경제 분석 결과")
+    print("-" * 50)
+    print(result.get(StateKey.MACRO_RESULT))
+    print("=" * 50)
