@@ -9,6 +9,20 @@ from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_openai import ChatOpenAI
 
+# 프로젝트 루트 경로 먼저 잡기
+CURRENT_FILE = Path(__file__).resolve()
+PROJECT_ROOT = CURRENT_FILE.parents[2]
+
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
+# .env 로드
+load_dotenv(PROJECT_ROOT / ".env")
+
+# 그 다음 내부 모듈 import
+from agents.constants import ModelConfig, StateKey
+from agents.state import AgentState
+
 # ==============================
 # 경로 설정 (직접 실행 대응)
 # ==============================
