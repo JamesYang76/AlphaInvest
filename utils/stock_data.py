@@ -53,7 +53,13 @@ def get_stock_info(ticker: str, name: str = "") -> Dict[str, Any]:
             "roe": f"{roe*100:.2f}%" if isinstance(roe, (int, float)) else roe,
             "debt_ratio": f"{debt_to_equity:.2f}" if isinstance(debt_to_equity, (int, float)) else debt_to_equity,
             "dps": f"{dps:,.0f}" if isinstance(dps, (int, float)) else dps,
-            "yield": f"{div_yield*100:.2f}%" if isinstance(div_yield, (int, float)) else div_yield,
+            "yield": (
+                f"{div_yield:.2f}%"
+                if isinstance(div_yield, (int, float)) and div_yield >= 0.2
+                else f"{div_yield*100:.2f}%"
+                if isinstance(div_yield, (int, float))
+                else div_yield
+            ),
             "news": news_snippet,
             "description": description[:300] + "...",
             "is_kr": is_kr,
