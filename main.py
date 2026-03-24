@@ -1,3 +1,5 @@
+from dotenv import load_dotenv
+
 from agents.constants import StateKey
 from agents.state import get_initial_state
 from agents.workflow import build_skeleton
@@ -8,6 +10,7 @@ logger = get_logger("main")
 
 
 def main():
+    load_dotenv()  # .env 파일 로드
     logger.info("🚀 AlphaInvest 에이전트 실행을 시작합니다...")
 
     # 1. 그래프 빌드 및 시각화
