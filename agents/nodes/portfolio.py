@@ -72,7 +72,8 @@ def portfolio_node(state: AgentState) -> Dict[str, Any]:
 
     # 💡 3. 실시간 시황 데이터 수집 (Tavily Search 및 FRED 지표 연동)
     macro_info = get_macro_context()
-    sector_info = get_sector_context()
+    tickers = [s.get("ticker") for s in user_portfolio if "ticker" in s]
+    sector_info = get_sector_context(tickers=tickers)
 
     # 💡 4. 프롬프트 조립 (구조화된 마크다운 포맷)
     prompt = ChatPromptTemplate.from_messages(
