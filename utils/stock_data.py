@@ -20,56 +20,66 @@ def get_stock_info(ticker: str, name: str = "") -> Dict[str, Any]:
         # 1. 한국 주식 처리 (pykrx 우선 사용)
         if is_kr:
             pure_ticker = ticker.split(".")[0]
-            today = datetime.now().strftime("%Y%m%d")
-            # OHLCV에서 현재가(종가) 가져오기
-            try:
-                df = krx.get_market_ohlcv_by_date(today, today, pure_ticker)
-                if df.empty:
-                    # 장 전이거나 공휴일이면 전일 데이터 시도
-                    yesterday = (datetime.now() - timedelta(days=3)).strftime("%Y%m%d")
-                    df = krx.get_market_ohlcv_by_date(yesterday, today, pure_ticker)
-
+            # 최근 영업일 데이터 가져오기 (최대 7일 전까지 시도)
+            for i in range(7):
+                target_date = (datetime.now() - timedelta(days=i)).strftime("%Y%m%d")
+                df = krx.get_market_ohlcv_by_date(target_date, target_date, pure_ticker)
                 if not df.empty:
                     current_price = float(df["종가"].iloc[-1])
+                    break
 
-                # Fundamental 데이터 (PER, PBR)
-                df_f = krx.get_market_fundamental(today, today, pure_ticker)
-                if not df_f.empty:
+            # 2. Fundamental 데이터 (PER, PBR) 별도 확보 (최대 14일 전까지 추적)
+            for j in range(i, i + 14):
+                f_date = (datetime.now() - timedelta(days=j)).strftime("%Y%m%d")
+                df_f = krx.get_market_fundamental(f_date, f_date, pure_ticker)
+                if not df_f.empty and df_f["PER"].iloc[-1] != 0:
                     per = df_f["PER"].iloc[-1]
                     pbr = df_f["PBR"].iloc[-1]
-            except Exception:
-                pass
+                    break
 
-        # 2. 공통/해외 및 추가 정보 (yfinance 사용)
+        # 2. 공통/해외 및 추가 정보 (yfinance 사용) - 지표 상호 보완
         yf_stock = yf.Ticker(ticker)
+        info = yf_stock.info
 
-        # 해외 주식 가격 또는 한국 주식 백업 가격
+        # 현재가 보정 (가장 최신 값 우선)
         if current_price == 0:
-            current_price = yf_stock.fast_info.get("lastPrice", 0)
+            current_price = info.get("currentPrice", info.get("regularMarketPrice", 0))
             if not current_price:
-                hist = yf_stock.history(period="1d")
+                current_price = yf_stock.fast_info.get("lastPrice", 0)
+            if not current_price:
+                hist = yf_stock.history(period="5d")
                 current_price = hist["Close"].iloc[-1] if not hist.empty else 0
 
-        # 지표 백업
-        if per == "N/A" or pbr == "N/A":
-            info = yf_stock.info
-            per = info.get("trailingPE", per)
-            pbr = info.get("priceToBook", pbr)
+        # 지표 상호 보완 (PER, PBR, EPS, BPS, ROE, Debt)
+        per = info.get("trailingPE", info.get("forwardPE", info.get("priceEpsCurrentYear", per)))
+        pbr = info.get("priceToBook", pbr)
+        eps = info.get("trailingEps", info.get("epsCurrentYear", "N/A"))
+        bps = info.get("bookValue", "N/A")
+        roe = info.get("returnOnEquity", "N/A")
+        debt_to_equity = info.get("debtToEquity", "N/A")
 
-        # 뉴스 및 설명 (yfinance가 더 풍부함)
+        # 배당 및 뉴스
+        dps = info.get("dividendRate", info.get("lastDividendValue", "N/A"))
+        div_yield = info.get("dividendYield", "N/A")
         news = yf_stock.news[:3]
         news_snippet = "\n".join([f"- {n.get('title')}" for n in news]) if news else news_snippet
-        description = yf_stock.info.get("longBusinessSummary", yf_stock.info.get("description", description))
+        description = info.get("longBusinessSummary", info.get("description", description))
 
         return {
             "ticker": ticker,
-            "name": name if name else ticker,
-            "current_price": current_price,
-            "per": per,
-            "pbr": pbr,
+            "name": name if name else info.get("longName", ticker),
+            "current_price": f"{current_price:,.0f}" if is_kr else f"{current_price:,.2f}",
+            "per": f"{per:,.2f}" if isinstance(per, (int, float)) and per != 0 else per,
+            "pbr": f"{pbr:,.2f}" if isinstance(pbr, (int, float)) and pbr != 0 else pbr,
+            "eps": f"{eps:,.0f}" if isinstance(eps, (int, float)) else eps,
+            "bps": f"{bps:,.0f}" if isinstance(bps, (int, float)) else bps,
+            "roe": f"{roe*100:.2f}%" if isinstance(roe, (int, float)) else roe,
+            "debt_ratio": f"{debt_to_equity:.2f}" if isinstance(debt_to_equity, (int, float)) else debt_to_equity,
+            "dps": f"{dps:,.0f}" if isinstance(dps, (int, float)) else dps,
+            "yield": f"{div_yield*100:.2f}%" if isinstance(div_yield, (int, float)) else div_yield,
             "news": news_snippet,
-            "description": description[:500],
+            "description": description[:300] + "...",
             "is_kr": is_kr,
         }
     except Exception as e:
-        return {"ticker": ticker, "error": str(e)}
+        return {"ticker": ticker, "error": f"데이터 수집 중 오류: {str(e)}"}

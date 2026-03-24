@@ -6,6 +6,7 @@ from langchain_openai import ChatOpenAI
 
 from agents.constants import ModelConfig, StateKey
 from agents.state import AgentState
+from utils.macro_data import get_macro_context, get_sector_context
 from utils.stock_data import get_stock_info
 
 # ==========================================
@@ -16,19 +17,22 @@ VIP 웰스 매니저이자 프라이빗 뱅커(PB)입니다.
 고객님이 보유한 종목 정보를 바탕으로 맞춤형 자산 진단 및 리밸런싱 전략을 제안하세요.
 
 분석 및 출력 가이드라인:
-1. 정밀 종목 진단: 보유 종목의 내재가치(PER, PBR 등)와 최근 시황은 물론, 현재 '단기간 과열(Overheated)'
-   여부를 기술적으로 진단하여 리졸브 가능한 리스크를 설명하세요.
-2. 시장 상황 대조: 거시 시황, 섹터 흐름, 전쟁/천재지변, 국가 부도 리스크 등
-   특수 글로벌 상황이 자산에 미칠 영향을 대조하세요.
-3. 교체 매매(Switching) 제안: 수익 극대화를 위해 어떤 타겟 종목(티커)이나 섹터로
-   갈아타야 하는지 구체적인 대안을 제시하세요.
-4. 전문적 소통: 결과는 고객에게 신뢰를 줄 수 있도록 단호하고 품격 있는 전문가의 어조를 사용하여
-   요약된 리포트 형태로 작성하세요. (3~5줄 내외)"""
+1. 보유/교체(Hold or Switch) 우선 판단: 현재 포트폴리오가 시황(AI, 에너지 등)에 잘 부합하고 펀더멘털이 우수하다면,
+   무리한 교체 대신 **보유(HOLD)** 전략을 강력히 권고하고 그 이유를 설명하세요.
+2. 정밀 종목 진단: 보유 종목의 내재가치와 현재 '단기간 과열(Overheated)' 여부,
+   그리고 고객의 **수익률(Profit Rate)**에 따른 매수/매도 적절성을 진단하세요.
+3. 시황 중심 리밸런싱: 만약 교체 매매를 제안한다면, 현재 가장 강력한 모멘텀을 가진 **대안 섹터**
+   (예: 원자재, 에너지 인프라 등)를 우선 고려하여 제안하세요.
+   (단순 유행주가 아닌, 매크로 지표와 뉴스에 나타난 유망 섹터를 선택하십시오.)
+4. 논리적 일관성: 리포트 내에서 분석(예: 기술주 우려)과 제안(예: 엔비디아 추천)이 상충하지 않도록 주의하고,
+   동일 섹터 내 교체 시 명확한 차별점을 제시하세요.
+5. 전문적 소통: 단호하고 품격 있는 PB의 어조로 마크다운 리포트 형태로 작성하세요.
+"""
 
 
 def portfolio_node(state: AgentState) -> Dict[str, Any]:
     """
-    유저의 포트폴리오를 진단하여 다양한 외부 상황(전쟁, 천재지변 등)에 맞는 전략을 생성하는 에이전트 노드입니다.
+    유저의 포트폴리오를 진단하여 실시간 시황(Tavily, FRED 연동)에 맞는 전략을 생성하는 에이전트 노드입니다.
     """
     # 💡 0. OpenAI API 키 검증 (가드 클로즈)
     if not os.getenv("OPENAI_API_KEY"):
@@ -39,40 +43,69 @@ def portfolio_node(state: AgentState) -> Dict[str, Any]:
 
     # 💡 2. 데이터 보강 (포트폴리오 개별 종목 정밀 데이터 및 시황 데이터 수집)
     user_portfolio = state.get(StateKey.USER_PORTFOLIO, [])
-    # 개별 종목별 상세 데이터(종가, PER, PBR, 최근 뉴스) 확보
-    enriched_portfolio = [get_stock_info(stock["ticker"]) for stock in user_portfolio if "ticker" in stock]
+    # 개별 종목별 상세 데이터(종가, PER, PBR, 최근 뉴스) 실시간 확보 (pykrx/yfinance 연동)
+    enriched_portfolio = []
+    for stock in user_portfolio:
+        ticker = stock.get("ticker")
+        avg_price = stock.get("avg_price", 0)
 
-    # 💡 3. 시황 데이터 구성 (거시 시황 내에 전쟁, 천재지변 등 특수한 전반적 상황을 통합)
-    dummy_macro = (
-        "- 미 연준 금리 동결 및 하반기 인하 기대감 상존\n"
-        "- 지정학적 교전 고조 및 원자재 가격 변동성 확대(전쟁/천재지변 요인 포함)"
-    )
-    dummy_sector = "- AI 반도체 밸류체인 강세 및 전력 인프라 순환매 확산\n"
+        info = get_stock_info(ticker)
 
-    # 💡 4. 프롬프트 조립
+        # 수익률 계산 (현재가와 평단가 비교)
+        try:
+            # current_price 문자열에서 쉼표 제거 후 float 변환
+            c_price = float(info.get("current_price", "0").replace(",", ""))
+            if avg_price > 0:
+                profit_rate = ((c_price - avg_price) / avg_price) * 100
+                info["avg_price"] = f"{avg_price:,.0f}"
+                info["profit_rate"] = f"{profit_rate:+.2f}%"
+            else:
+                info["avg_price"] = "N/A"
+                info["profit_rate"] = "N/A"
+        except Exception:
+            info["avg_price"] = f"{avg_price:,.0f}"
+            info["profit_rate"] = "계산 불가"
+
+        enriched_portfolio.append(info)
+
+    # 💡 3. 실시간 시황 데이터 수집 (Tavily Search 및 FRED 지표 연동)
+    macro_info = get_macro_context()
+    sector_info = get_sector_context()
+
+    # 💡 4. 프롬프트 조립 (구조화된 마크다운 포맷)
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", PORTFOLIO_SYSTEM_PROMPT),
             (
                 "user",
-                "고객 포트폴리오 상세: {enriched_portfolio}\n\n"
-                "분석 참고 지표:\n"
-                "- 글로벌 거시 시황 요약 (전쟁/특수 상황 포함): {macro_info}\n"
-                "- 섹터 및 시장 시황 요약: {sector_info}\n\n"
-                "지침: 위 데이터를 종합하여 포트폴리오를 진단하고 리밸런싱 플랜을 작성하세요.",
+                "### 1. 고객 포트폴리오 현황\n"
+                "{enriched_portfolio_str}\n\n"
+                "### 2. 글로벌 거시 경제 상황 (Geopolitics & Macro)\n"
+                "{macro_info}\n\n"
+                "### 3. 주도 섹터 및 투자 테마 (Alpha & Sector Rotation)\n"
+                "{sector_info}\n\n"
+                "--- \n"
+                "**지침**: 위 섹션의 데이터를 종합적으로 분석하여, "
+                "고객의 수익을 극대화하면서도 리스크를 방어할 수 있는 "
+                "PB 수준의 정교한 리밸런싱 포트폴리오 리포트를 작성하세요.",
             ),
         ]
     )
 
-    # 💡 5. 체인 구축 및 실행 (데이터 키 macro_info, sector_info 일치)
+    # 포트폴리오 데이터를 가독성 좋게 변환 (YAML 형태의 문자열화)
+    import yaml
+
+    enriched_portfolio_str = yaml.dump(enriched_portfolio, allow_unicode=True, default_flow_style=False)
+
+    # 💡 5. 체인 구축 및 실행
+    input_data = {
+        "enriched_portfolio_str": enriched_portfolio_str,
+        "macro_info": macro_info,
+        "sector_info": sector_info,
+    }
+
     try:
-        response = (prompt | llm).invoke(
-            {
-                "enriched_portfolio": str(enriched_portfolio),
-                "macro_info": dummy_macro,
-                "sector_info": dummy_sector,
-            }
-        )
+        response = (prompt | llm).invoke(input_data)
         result_text = response.content
     except Exception as e:
         result_text = f"포트폴리오 진단 엔진 가동 중 오류 발생: {str(e)}"
