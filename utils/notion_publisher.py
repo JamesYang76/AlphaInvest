@@ -1,5 +1,6 @@
 """Notion API를 통한 리포트 발행 유틸리티 모듈"""
 
+import datetime
 import os
 import re
 from typing import Any, Dict, List, Tuple
@@ -80,14 +81,31 @@ def _classify_line(line: str) -> Tuple[str, str]:
 def markdown_to_notion_blocks(markdown_text: str) -> List[Dict[str, Any]]:
     """마크다운 전문을 Notion Block 오브젝트 리스트로 변환합니다."""
     blocks: List[Dict[str, Any]] = []
+    paragraph_buffer: List[str] = []
+
+    def flush_paragraph() -> None:
+        if not paragraph_buffer:
+            return
+        paragraph_text = " ".join(paragraph_buffer).strip()
+        if paragraph_text:
+            blocks.append(_make_block("paragraph", _parse_inline_markdown(paragraph_text)))
+        paragraph_buffer.clear()
+
     for line in markdown_text.split("\n"):
         block_type, content = _classify_line(line)
         if block_type == "empty":
+            flush_paragraph()
             continue
         if block_type == "divider":
+            flush_paragraph()
             blocks.append({"object": "block", "type": "divider", "divider": {}})
             continue
+        if block_type == "paragraph":
+            paragraph_buffer.append(content)
+            continue
+        flush_paragraph()
         blocks.append(_make_block(block_type, _parse_inline_markdown(content)))
+    flush_paragraph()
     return blocks
 
 
@@ -95,10 +113,58 @@ def markdown_to_notion_blocks(markdown_text: str) -> List[Dict[str, Any]]:
 # 3. Notion 페이지 생성 API
 # ============================================================
 def _detect_title_property(client: Client, database_id: str) -> str:
-    """데이터베이스 스키마에서 title 타입 프로퍼티 이름을 자동 탐지합니다."""
+    """데이터베이스/데이터소스 스키마에서 title 타입 프로퍼티 이름을 자동 탐지합니다."""
     db = client.databases.retrieve(database_id=database_id)
-    title_props = [name for name, prop in db["properties"].items() if prop["type"] == "title"]
-    return title_props[0] if title_props else "Name"
+    if "properties" in db:
+        title_props = [name for name, prop in db["properties"].items() if prop["type"] == "title"]
+        return title_props[0] if title_props else "Name"
+
+    # Notion 최신 API 응답에서는 database에 properties 대신 data_sources가 포함될 수 있습니다.
+    data_sources = db.get("data_sources", [])
+    if data_sources and hasattr(client, "data_sources"):
+        ds_id = data_sources[0]["id"]
+        ds = client.data_sources.retrieve(data_source_id=ds_id)
+        title_props = [name for name, prop in ds.get("properties", {}).items() if prop.get("type") == "title"]
+        return title_props[0] if title_props else "Name"
+
+    raise KeyError("title property not found in database schema")
+
+
+def _detect_date_property(client: Client, database_id: str) -> str:
+    """데이터베이스/데이터소스 스키마에서 date 타입 프로퍼티 이름을 자동 탐지합니다."""
+    db = client.databases.retrieve(database_id=database_id)
+    if "properties" in db:
+        date_props = [name for name, prop in db["properties"].items() if prop["type"] == "date"]
+        return date_props[0] if date_props else ""
+
+    data_sources = db.get("data_sources", [])
+    if data_sources and hasattr(client, "data_sources"):
+        ds_id = data_sources[0]["id"]
+        ds = client.data_sources.retrieve(data_source_id=ds_id)
+        date_props = [name for name, prop in ds.get("properties", {}).items() if prop.get("type") == "date"]
+        return date_props[0] if date_props else ""
+
+    return ""
+
+
+def _build_page_properties(client: Client, database_id: str, title: str) -> Dict[str, Any]:
+    """페이지 생성 시 사용할 속성(title/date)을 구성합니다."""
+    title_prop = _detect_title_property(client, database_id)
+    properties: Dict[str, Any] = {
+        title_prop: {"title": [{"text": {"content": title}}]},
+    }
+
+    date_prop = _detect_date_property(client, database_id)
+    if date_prop:
+        now = datetime.datetime.now().replace(microsecond=0)
+        properties[date_prop] = {
+            "date": {
+                "start": now.isoformat(),
+                "time_zone": "Asia/Seoul",
+            }
+        }
+
+    return properties
 
 
 def _append_remaining_blocks(client: Client, page_id: str, blocks: List[Dict[str, Any]]) -> None:
@@ -117,12 +183,12 @@ def publish_to_notion(title: str, markdown_text: str) -> str:
         return ""
 
     client = Client(auth=api_key)
-    title_prop = _detect_title_property(client, database_id)
     blocks = markdown_to_notion_blocks(markdown_text)
+    properties = _build_page_properties(client, database_id, title)
 
     page = client.pages.create(
         parent={"database_id": database_id},
-        properties={title_prop: {"title": [{"text": {"content": title}}]}},
+        properties=properties,
         children=blocks[:_BLOCKS_PER_REQUEST],
     )
 
