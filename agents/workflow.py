@@ -6,6 +6,7 @@ from agents.nodes.cio import cio_node
 from agents.nodes.gp import gp_node
 from agents.nodes.macro import macro_node
 from agents.nodes.portfolio import portfolio_node
+from agents.nodes.publish import publish_node
 from agents.nodes.risk import risk_node
 from agents.state import AgentState
 from utils.logger import get_logger
@@ -60,6 +61,7 @@ def build_skeleton() -> StateGraph:
     builder.add_node(AgentName.PORTFOLIO, portfolio_node)
     builder.add_node(AgentName.GP, gp_node)
     builder.add_node(AgentName.CIO, cio_node)
+    builder.add_node(AgentName.PUBLISH, publish_node)
 
     # 2. 시작점 설정
     builder.add_edge(START, AgentName.MACRO)
@@ -81,7 +83,8 @@ def build_skeleton() -> StateGraph:
         },
     )
 
-    # 5. 최종 리포트 합성이 끝나면 종료
-    builder.add_edge(AgentName.CIO, END)
+    # 5. 최종 리포트 → Notion 발행 → 종료
+    builder.add_edge(AgentName.CIO, AgentName.PUBLISH)
+    builder.add_edge(AgentName.PUBLISH, END)
 
     return builder.compile()

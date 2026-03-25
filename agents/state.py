@@ -35,6 +35,9 @@ class AgentState(TypedDict):
     # 5. CIO(총괄 편집장)가 병합한 최종 퍼블리시 리포트
     final_report: str
 
+    # 6. Notion 발행 결과
+    notion_page_url: str
+
 
 def get_initial_state(user_portfolio: List[Dict[str, Any]]) -> AgentState:
     """
@@ -54,4 +57,5 @@ def get_initial_state(user_portfolio: List[Dict[str, Any]]) -> AgentState:
         StateKey.PORTFOLIO_RESULT: "",
         StateKey.CURRENT_REPORT: "",
         StateKey.FINAL_REPORT: "",
+        StateKey.NOTION_PAGE_URL: "",
     }
