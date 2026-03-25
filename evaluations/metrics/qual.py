@@ -76,7 +76,7 @@ def evaluate_with_llm_judge(report: str, style_guide_path: str = "STYLE_GUIDE.md
             "reasoning": "평가할 리포트가 비어 있습니다.",
         }
 
-    llm = get_llm(temperature=0.1)
+    llm = get_llm(model="gpt-5.4", temperature=0.1)
 
     try:
         with open(style_guide_path, "r", encoding="utf-8") as f:
@@ -173,7 +173,6 @@ verdict 기준:
 - 과도하게 공격적인 투자 의견이 없어도 감점하지 마세요
 - 안정적이고 보수적인 리포트는 오히려 긍정적으로 평가하세요
 - 일반적인 수준의 투자 조언도 논리와 일관성이 있으면 높은 점수를 줄 수 있습니다
-            """.strip(),
                 """.strip(),
             ),
             (
@@ -184,7 +183,6 @@ verdict 기준:
 
 [평가 대상 리포트]
 {report}
-            """.strip(),
                 """.strip(),
             ),
         ]

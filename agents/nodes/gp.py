@@ -21,7 +21,7 @@ def gp_node(state: AgentState) -> Dict[str, Any]:
     제출된 분석 리포트를 전문가의 관점에서 심사/검수하며,
     결함 발견 시 즉시 직접 수정(Auto-Repair)하여 최종 결과를 반환합니다.
     """
-    llm = get_llm(model="gpt-5.4-nano", temperature=0.0)
+    llm = get_llm(model="gpt-5.4-mini", temperature=0.0)
     last_node = state.get("last_node", "알 수 없음")
 
     # 데이터 확보

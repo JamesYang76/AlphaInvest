@@ -3,11 +3,40 @@
     "id": "sample_03",
     "description": "Mixed US+Korea Portfolio (Tech Heavy)",
     "portfolio": [
-      {"ticker": "005930.KS", "quantity": 50, "avg_price": 75000},
-      {"ticker": "AAPL",      "quantity": 10, "avg_price": 170.0},
-      {"ticker": "NVDA",      "quantity": 5,  "avg_price": 450.0}
+      {
+        "ticker": "005930.KS",
+        "quantity": 50,
+        "avg_price": 75000
+      },
+      {
+        "ticker": "AAPL",
+        "quantity": 10,
+        "avg_price": 170.0
+      },
+      {
+        "ticker": "NVDA",
+        "quantity": 5,
+        "avg_price": 450.0
+      },
+      {
+        "ticker": "NVDA",
+        "quantity": 5,
+        "avg_price": 450.0
+      },
+      {
+        "ticker": "036570.KS",
+        "quantity": 5,
+        "avg_price": 850000
+      }
     ],
-    "expected_entities": ["FED", "Samsung", "NVIDIA", "Apple", "반도체", "CPI"],
+    "expected_entities": [
+      "FED",
+      "Samsung",
+      "NVIDIA",
+      "Apple",
+      "반도체",
+      "CPI"
+    ],
     "min_score": 0.7
   }
 ]
