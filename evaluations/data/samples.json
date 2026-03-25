@@ -1,0 +1,21 @@
+[
+  {
+    "id": "sample_01",
+    "description": "Bullish US Market with Portfolio",
+    "portfolio": [
+      {
+        "ticker": "AAPL",
+        "quantity": 20,
+        "avg_price": 170.0
+      }
+    ],
+    "expected_entities": [
+      "FED",
+      "Inflation",
+      "CPI",
+      "NVIDIA",
+      "Apple"
+    ],
+    "min_score": 0.7
+  }
+]
