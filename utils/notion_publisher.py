@@ -110,26 +110,8 @@ def markdown_to_notion_blocks(markdown_text: str) -> List[Dict[str, Any]]:
 
 
 # ============================================================
-# 3. Notion 페이지 생성 API
+# 3. Notion 페이지 생성 API_check
 # ============================================================
-def _detect_title_property(client: Client, database_id: str) -> str:
-    """데이터베이스/데이터소스 스키마에서 title 타입 프로퍼티 이름을 자동 탐지합니다."""
-    db = client.databases.retrieve(database_id=database_id)
-    if "properties" in db:
-        title_props = [name for name, prop in db["properties"].items() if prop["type"] == "title"]
-        return title_props[0] if title_props else "Name"
-
-    # Notion 최신 API 응답에서는 database에 properties 대신 data_sources가 포함될 수 있습니다.
-    data_sources = db.get("data_sources", [])
-    if data_sources and hasattr(client, "data_sources"):
-        ds_id = data_sources[0]["id"]
-        ds = client.data_sources.retrieve(data_source_id=ds_id)
-        title_props = [name for name, prop in ds.get("properties", {}).items() if prop.get("type") == "title"]
-        return title_props[0] if title_props else "Name"
-
-    raise KeyError("title property not found in database schema")
-
-
 def _detect_date_property(client: Client, database_id: str) -> str:
     """데이터베이스/데이터소스 스키마에서 date 타입 프로퍼티 이름을 자동 탐지합니다."""
     db = client.databases.retrieve(database_id=database_id)
