@@ -3,7 +3,6 @@ from __future__ import annotations
 import re
 from typing import Any, Dict, List, Optional
 
-
 # =========================================================
 # 동의어 매핑 테이블: entity → [한글/영어 동의어 리스트]
 # 영어 entity를 한글 리포트에서도 인식하기 위한 매핑입니다.
@@ -32,9 +31,9 @@ NUMERIC_DENSITY_BASELINE = 20
 # 4대 카테고리 가중치 (합계 = 1.0)
 COMPOSITE_WEIGHTS = {
     "completeness": 0.25,  # 완성도 = 섹션 구조 + 섹션 충실도
-    "accuracy":     0.25,  # 정확도 = 수치 정확도 (환각 탐지)
-    "coverage":     0.25,  # 커버리지 = 핵심 시장 지표 언급
-    "relevance":    0.25,  # 관련성 = 포트폴리오 티커 + entity 검출
+    "accuracy": 0.25,  # 정확도 = 수치 정확도 (환각 탐지)
+    "coverage": 0.25,  # 커버리지 = 핵심 시장 지표 언급
+    "relevance": 0.25,  # 관련성 = 포트폴리오 티커 + entity 검출
 }
 
 # 티커 → 한글/영어 별칭 매핑
@@ -53,6 +52,7 @@ TICKER_ALIASES: Dict[str, List[str]] = {
 # 내부 헬퍼
 # =========================================================
 
+
 def _resolve_entity(entity: str, report_lower: str) -> bool:
     """entity 또는 그 동의어 중 하나라도 리포트에 있으면 True."""
     base = [entity.lower()]
@@ -66,6 +66,7 @@ def _resolve_entity(entity: str, report_lower: str) -> bool:
 # =========================================================
 # 1. Entity 검출률 (동의어 매핑 포함)
 # =========================================================
+
 
 def calculate_extraction_score(actual_report: str, expected_entities: List[str]) -> float:
     """
@@ -84,6 +85,7 @@ def calculate_extraction_score(actual_report: str, expected_entities: List[str])
 # =========================================================
 # 2. 4대 섹션 구조 검증 (기존 유지)
 # =========================================================
+
 
 def evaluate_cio_report_structure(report: str) -> Dict[str, bool]:
     """
@@ -106,6 +108,7 @@ def evaluate_cio_report_structure(report: str) -> Dict[str, bool]:
 # 3. VIX ↔ 리스크 스코어 수치 일관성 검증 (기존 유지)
 # =========================================================
 
+
 def evaluate_numeric_consistency(macro_data: Dict[str, Any], risk_data: Dict[str, Any]) -> bool:
     """거시 지표(VIX 등)와 리스크 스코어 간의 논리적 모순 여부를 검증합니다."""
     vix = float(macro_data.get("vix", 20))
@@ -118,6 +121,7 @@ def evaluate_numeric_consistency(macro_data: Dict[str, Any], risk_data: Dict[str
 # 4. 섹션별 내용 충실도 (단어 수 기반)
 # =========================================================
 
+
 def calculate_section_depth_score(report: str) -> Dict[str, Any]:
     """
     섹션별 단어 수를 측정하여 내용 충실도를 점수화합니다.
@@ -127,10 +131,10 @@ def calculate_section_depth_score(report: str) -> Dict[str, Any]:
         각 섹션의 word_count, sufficient 여부, 전체 score(0.0~1.0) 포함 dict
     """
     section_patterns = {
-        "macro":     r"(?:## I\.|거시경제 시황)(.*?)(?=## II\.|포트폴리오 진단|$)",
+        "macro": r"(?:## I\.|거시경제 시황)(.*?)(?=## II\.|포트폴리오 진단|$)",
         "portfolio": r"(?:## II\.|포트폴리오 진단)(.*?)(?=## III\.|리스크 경고|$)",
-        "risk":      r"(?:## III\.|리스크 경고)(.*?)(?=## IV\.|투자 기회|$)",
-        "alpha":     r"(?:## IV\.|투자 기회)(.*?)$",
+        "risk": r"(?:## III\.|리스크 경고)(.*?)(?=## IV\.|투자 기회|$)",
+        "alpha": r"(?:## IV\.|투자 기회)(.*?)$",
     }
 
     result: Dict[str, Any] = {}
@@ -150,6 +154,7 @@ def calculate_section_depth_score(report: str) -> Dict[str, Any]:
 # =========================================================
 # 5. 포트폴리오 티커 언급률
 # =========================================================
+
 
 def calculate_ticker_mention_score(report: str, portfolio: List[Dict[str, Any]]) -> float:
     """
@@ -177,12 +182,13 @@ def calculate_ticker_mention_score(report: str, portfolio: List[Dict[str, Any]])
 # 6. 숫자 데이터 밀도 (%, 금리, 지수 등)
 # =========================================================
 
+
 def calculate_numeric_density_score(report: str) -> float:
     """
     리포트 내 숫자 데이터(%, 금리, 지수 등) 밀도를 측정합니다.
     1000단어당 NUMERIC_DENSITY_BASELINE(20)개 이상이면 1.0(만점)을 반환합니다.
     """
-    numeric_pattern = r'[\+\-]?\d+\.?\d*\s*(?:%|bp|원|달러|포인트|배|억|조|만)?'
+    numeric_pattern = r"[\+\-]?\d+\.?\d*\s*(?:%|bp|원|달러|포인트|배|억|조|만)?"
     matches = re.findall(numeric_pattern, report)
 
     word_count = len(report.split())
@@ -203,17 +209,17 @@ def calculate_numeric_density_score(report: str) -> float:
 
 # 전문 투자 리포트에서 반드시 다뤄야 할 12개 핵심 시장 지표 체크리스트
 MARKET_INDICATORS_CHECKLIST: Dict[str, List[str]] = {
-    "fed_rate":      ["연방기금금리", "기준금리", "연준", "fed rate", "federal reserve"],
-    "treasury_10y":  ["10년물", "국채 10년", "treasury", "ten year", "10y"],
-    "cpi":           ["cpi", "소비자물가지수", "소비자물가"],
-    "inflation":     ["인플레이션", "inflation", "물가상승", "물가"],
-    "sp500":         ["s&p500", "s&p 500", "spx", "s&p"],
-    "vix":           ["vix", "변동성지수", "변동성", "공포지수"],
-    "gdp":           ["gdp", "국내총생산", "경제성장"],
-    "unemployment":  ["실업률", "unemployment", "고용"],
-    "dxy":           ["dxy", "달러인덱스", "달러 인덱스", "달러"],
+    "fed_rate": ["연방기금금리", "기준금리", "연준", "fed rate", "federal reserve"],
+    "treasury_10y": ["10년물", "국채 10년", "treasury", "ten year", "10y"],
+    "cpi": ["cpi", "소비자물가지수", "소비자물가"],
+    "inflation": ["인플레이션", "inflation", "물가상승", "물가"],
+    "sp500": ["s&p500", "s&p 500", "spx", "s&p"],
+    "vix": ["vix", "변동성지수", "변동성", "공포지수"],
+    "gdp": ["gdp", "국내총생산", "경제성장"],
+    "unemployment": ["실업률", "unemployment", "고용"],
+    "dxy": ["dxy", "달러인덱스", "달러 인덱스", "달러"],
     "exchange_rate": ["환율", "원달러", "usd/krw", "원/달러"],
-    "high_yield":    ["하이일드", "high yield", "hy spread"],
+    "high_yield": ["하이일드", "high yield", "hy spread"],
     "credit_spread": ["크레딧 스프레드", "credit spread", "스프레드"],
 }
 
@@ -246,15 +252,11 @@ def calculate_coverage_completeness_score(report: str) -> Dict[str, Any]:
 
 # 리포트에서 각 지표 수치를 추출하기 위한 정규식 패턴
 INDICATOR_EXTRACT_PATTERNS: Dict[str, List[str]] = {
-    "fed_rate":      [r"(?:연방기금금리|기준금리|연준.*?금리|금리)[^0-9]*([0-9]+\.?[0-9]*)\s*%"],
-    "cpi":           [r"CPI[^0-9]*([0-9]+\.?[0-9]*)\s*%",
-                      r"소비자물가(?:지수)?[^0-9]*([0-9]+\.?[0-9]*)\s*%"],
-    "vix":           [r"VIX\s*(?:지수|는|가|은|:)?\s*([0-9]+\.?[0-9]*)(?!\s*%)",
-                      r"변동성지수\s*(?:는|가|은|:)?\s*([0-9]+\.?[0-9]*)(?!\s*%)"],
-    "unemployment":  [r"실업률[^0-9]*([0-9]+\.?[0-9]*)\s*%",
-                      r"unemployment[^0-9]*([0-9]+\.?[0-9]*)\s*%"],
-    "ten_year_yield":[r"(?:10년물|국채\s*10년)[^0-9]*([0-9]+\.?[0-9]*)\s*%",
-                      r"treasury[^0-9]*([0-9]+\.?[0-9]*)\s*%"],
+    "fed_rate": [r"(?:연방기금금리|기준금리|연준.*?금리|금리)[^0-9]*([0-9]+\.?[0-9]*)\s*%"],
+    "cpi": [r"CPI[^0-9]*([0-9]+\.?[0-9]*)\s*%", r"소비자물가(?:지수)?[^0-9]*([0-9]+\.?[0-9]*)\s*%"],
+    "vix": [r"VIX\s*(?:지수|는|가|은|:)?\s*([0-9]+\.?[0-9]*)(?!\s*%)", r"변동성지수\s*(?:는|가|은|:)?\s*([0-9]+\.?[0-9]*)(?!\s*%)"],
+    "unemployment": [r"실업률[^0-9]*([0-9]+\.?[0-9]*)\s*%", r"unemployment[^0-9]*([0-9]+\.?[0-9]*)\s*%"],
+    "ten_year_yield": [r"(?:10년물|국채\s*10년)[^0-9]*([0-9]+\.?[0-9]*)\s*%", r"treasury[^0-9]*([0-9]+\.?[0-9]*)\s*%"],
 }
 
 # 허용 오차 기준 (상대 오차 5% 이내면 정확으로 판정)
@@ -288,14 +290,15 @@ def calculate_factual_grounding_score(
     """
     if macro_data is None:
         from data.fetchers import fetch_macro_data
+
         macro_data = fetch_macro_data()
 
     # fetch_macro_data() 키 → INDICATOR_EXTRACT_PATTERNS 키 매핑
     actual_values: Dict[str, Optional[float]] = {
-        "fed_rate":       _parse_macro_value(macro_data.get("d_fed_rate") or macro_data.get("fed_rate")),
-        "cpi":            _parse_macro_value(macro_data.get("cpi")),
-        "vix":            _parse_macro_value(macro_data.get("vix")),
-        "unemployment":   _parse_macro_value(macro_data.get("unemployment")),
+        "fed_rate": _parse_macro_value(macro_data.get("d_fed_rate") or macro_data.get("fed_rate")),
+        "cpi": _parse_macro_value(macro_data.get("cpi")),
+        "vix": _parse_macro_value(macro_data.get("vix")),
+        "unemployment": _parse_macro_value(macro_data.get("unemployment")),
         "ten_year_yield": _parse_macro_value(macro_data.get("ten_year_yield")),
     }
 
@@ -329,9 +332,9 @@ def calculate_factual_grounding_score(
         is_accurate = relative_error <= FACTUAL_TOLERANCE
 
         result[indicator] = {
-            "status":         "accurate" if is_accurate else "hallucination",
-            "extracted":      extracted,
-            "actual":         actual,
+            "status": "accurate" if is_accurate else "hallucination",
+            "extracted": extracted,
+            "actual": actual,
             "relative_error": round(relative_error, 4),
         }
         checked += 1
@@ -347,6 +350,7 @@ def calculate_factual_grounding_score(
 # =========================================================
 # 10. 4대 카테고리 점수
 # =========================================================
+
 
 def calculate_completeness_score(
     structure_check: Dict[str, bool],
@@ -403,22 +407,22 @@ def calculate_composite_score(
         {completeness, accuracy, coverage, relevance, score} 포함 dict
     """
     completeness = calculate_completeness_score(structure_check, section_depth)
-    accuracy     = calculate_accuracy_score(factual_grounding)
-    cov_score    = coverage.get("score", 0.0) if coverage else 0.0
-    relevance    = calculate_relevance_score(extraction_score, ticker_score)
+    accuracy = calculate_accuracy_score(factual_grounding)
+    cov_score = coverage.get("score", 0.0) if coverage else 0.0
+    relevance = calculate_relevance_score(extraction_score, ticker_score)
 
     score = round(
         COMPOSITE_WEIGHTS["completeness"] * completeness
-        + COMPOSITE_WEIGHTS["accuracy"]   * accuracy
-        + COMPOSITE_WEIGHTS["coverage"]   * cov_score
-        + COMPOSITE_WEIGHTS["relevance"]  * relevance,
+        + COMPOSITE_WEIGHTS["accuracy"] * accuracy
+        + COMPOSITE_WEIGHTS["coverage"] * cov_score
+        + COMPOSITE_WEIGHTS["relevance"] * relevance,
         4,
     )
 
     return {
         "completeness": completeness,
-        "accuracy":     accuracy,
-        "coverage":     cov_score,
-        "relevance":    relevance,
-        "score":        score,
+        "accuracy": accuracy,
+        "coverage": cov_score,
+        "relevance": relevance,
+        "score": score,
     }

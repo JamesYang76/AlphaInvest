@@ -63,10 +63,10 @@ def evaluate_with_llm_judge(report: str, style_guide_path: str = "STYLE_GUIDE.md
         style_content = "격식 있는 투자 리포트 문체, 문단형 서술, 섹션 구조 유지, 전문가 톤 유지"
 
     prompt = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            """
+        [
+            (
+                "system",
+                """
 당신은 투자 리포트의 품질을 평가하는 AI 심사관입니다.
 
 당신의 역할은 아래 리포트가
@@ -122,19 +122,19 @@ def evaluate_with_llm_judge(report: str, style_guide_path: str = "STYLE_GUIDE.md
 - 안정적이고 보수적인 리포트는 오히려 긍정적으로 평가하세요
 - 일반적인 수준의 투자 조언도 논리와 일관성이 있으면 높은 점수를 줄 수 있습니다
             """.strip(),
-        ),
-        (
-            "user",
-            """
+            ),
+            (
+                "user",
+                """
 [스타일 가이드]
 {style_content}
 
 [평가 대상 리포트]
 {report}
             """.strip(),
-        ),
-    ]
-)
+            ),
+        ]
+    )
 
     chain = prompt | llm
     response = chain.invoke(
@@ -175,11 +175,7 @@ def evaluate_with_llm_judge_average(
         result = evaluate_with_llm_judge(report, style_guide_path=style_guide_path)
         runs.append(result)
 
-    valid_scores = [
-        float(r.get("overall_score", 0.0))
-        for r in runs
-        if isinstance(r.get("overall_score", 0.0), (int, float))
-    ]
+    valid_scores = [float(r.get("overall_score", 0.0)) for r in runs if isinstance(r.get("overall_score", 0.0), (int, float))]
 
     criteria_names = ["logic", "persuasiveness", "expert_tone", "readability", "consistency"]
     criteria_avg = {}

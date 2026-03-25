@@ -58,6 +58,7 @@ def evaluate_results(run_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     # 실시간 거시 데이터를 한 번만 호출 (모든 샘플에서 공유)
     from data.fetchers import fetch_macro_data
+
     macro_data = fetch_macro_data()
 
     results = []
@@ -65,34 +66,41 @@ def evaluate_results(run_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         report = data["result"].get(StateKey.FINAL_REPORT, "")
         portfolio = data["input"]
 
-        structure_check    = evaluate_cio_report_structure(report)
-        extraction_score   = calculate_extraction_score(report, data["expected_entities"])
-        section_depth      = calculate_section_depth_score(report)
-        ticker_score       = calculate_ticker_mention_score(report, portfolio)
-        numeric_density    = calculate_numeric_density_score(report)
-        coverage           = calculate_coverage_completeness_score(report)
-        factual_grounding  = calculate_factual_grounding_score(report, macro_data)
-        composite          = calculate_composite_score(
-            extraction_score, structure_check, section_depth,
-            ticker_score, numeric_density, coverage, factual_grounding,
+        structure_check = evaluate_cio_report_structure(report)
+        extraction_score = calculate_extraction_score(report, data["expected_entities"])
+        section_depth = calculate_section_depth_score(report)
+        ticker_score = calculate_ticker_mention_score(report, portfolio)
+        numeric_density = calculate_numeric_density_score(report)
+        coverage = calculate_coverage_completeness_score(report)
+        factual_grounding = calculate_factual_grounding_score(report, macro_data)
+        composite = calculate_composite_score(
+            extraction_score,
+            structure_check,
+            section_depth,
+            ticker_score,
+            numeric_density,
+            coverage,
+            factual_grounding,
         )
 
-        results.append({
-            "id": data["id"],
-            "final_report": report,
-            # 세부 지표
-            "structure_check":       structure_check,
-            "extraction_score":      extraction_score,
-            "section_depth":         section_depth,
-            "ticker_mention_score":  ticker_score,
-            "numeric_density_score": numeric_density,
-            "coverage_score":        coverage,
-            "factual_grounding":     factual_grounding,
-            # 4대 카테고리 + 종합 점수
-            "scores": composite,
-            "qual_eval":             evaluate_with_llm_judge(report),
-            "timestamp":             datetime.now().isoformat(),
-        })
+        results.append(
+            {
+                "id": data["id"],
+                "final_report": report,
+                # 세부 지표
+                "structure_check": structure_check,
+                "extraction_score": extraction_score,
+                "section_depth": section_depth,
+                "ticker_mention_score": ticker_score,
+                "numeric_density_score": numeric_density,
+                "coverage_score": coverage,
+                "factual_grounding": factual_grounding,
+                # 4대 카테고리 + 종합 점수
+                "scores": composite,
+                "qual_eval": evaluate_with_llm_judge(report),
+                "timestamp": datetime.now().isoformat(),
+            }
+        )
     return results
 
 

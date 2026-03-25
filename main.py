@@ -30,6 +30,7 @@ def main():
         StateKey.RISK_RESULT: lambda v: logger.info(f"🛑 리스크 알림: {v[:50]}..."),
         StateKey.PORTFOLIO_RESULT: lambda v: logger.info(f"💼 포트폴리오 진단 완료: {v[:50]}..."),
         StateKey.FINAL_REPORT: lambda _: logger.info("📝 최종 리포트 작성이 완료되었습니다."),
+        StateKey.NOTION_PAGE_URL: lambda v: logger.info(f"📰 Notion 발행 완료: {v}") if v else None,
     }
 
     final_state = initial_state

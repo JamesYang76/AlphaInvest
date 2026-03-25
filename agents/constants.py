@@ -21,6 +21,7 @@ class StateKey:
     PORTFOLIO_RESULT: Final = "portfolio_result"
     CURRENT_REPORT: Final = "current_report"  # 💡 GP 심사용 공통 리포트 키
     FINAL_REPORT: Final = "final_report"
+    NOTION_PAGE_URL: Final = "notion_page_url"  # 💡 Notion 발행 결과 URL
 
     # 3. 메모리(Messages) 키
     MACRO_MESSAGES: Final = "macro_messages"
@@ -43,6 +44,7 @@ class AgentName:
     PORTFOLIO: Final = "portfolio_agent"
     GP: Final = "gp_agent"
     CIO: Final = "cio_agent"
+    PUBLISH: Final = "publish_agent"
 
 
 # ==========================================================
