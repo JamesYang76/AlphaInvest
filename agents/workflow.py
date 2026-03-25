@@ -17,7 +17,7 @@ logger = get_logger("agents.workflow")
 def gp_router(state: AgentState) -> str:
     """
     GP가 수정을 마쳤으므로, 반려 없이 무조건 다음 단계로 진행합니다.
-    순서: Macro -> Portfolio -> Risk -> Alpha -> CIO
+    순서: Macro -> Risk -> Portfolio -> Alpha -> CIO
     """
     last_node = state.get("last_node")
 
@@ -25,8 +25,8 @@ def gp_router(state: AgentState) -> str:
     # GP는 이미 반려 사유가 있을 시 수정을 마친 상태이므로 무조건 전진합니다.
     phase_order = [
         AgentName.MACRO,  # 1단계: 거시 환경 판세 읽기
-        AgentName.PORTFOLIO,  # 2단계: 최신 판세 기반 계좌 진단
-        AgentName.RISK,  # 3단계: 리스크 정밀 스캔
+        AgentName.RISK,  # 2단계: 리스크 정밀 스캔
+        AgentName.PORTFOLIO,  # 3단계: 최신 판세 기반 계좌 진단
         AgentName.ALPHA,  # 4단계: 최종 유망 섹터(기회) 발굴
     ]
 
@@ -49,7 +49,7 @@ def build_skeleton() -> StateGraph:
     ==========================================================
     📌 AlphaInvest 파이프라인 흐름도 (Sequential Flow)
     ==========================================================
-    순서: Macro -> Portfolio -> Risk -> Alpha -> CIO
+    순서: Macro -> Risk -> Portfolio -> Alpha -> CIO
     각 단계 완료 후 GP의 논리 검수를 통과해야만 다음 단계로 진행합니다.
     """
     builder = StateGraph(AgentState)
@@ -67,7 +67,7 @@ def build_skeleton() -> StateGraph:
     builder.add_edge(START, AgentName.MACRO)
 
     # 3. 각 에이전트 완료 후 GP 검수대로 이동
-    agents = [AgentName.MACRO, AgentName.PORTFOLIO, AgentName.RISK, AgentName.ALPHA]
+    agents = [AgentName.MACRO, AgentName.RISK, AgentName.PORTFOLIO, AgentName.ALPHA]
     for agent in agents:
         builder.add_edge(agent, AgentName.GP)
 
@@ -76,9 +76,9 @@ def build_skeleton() -> StateGraph:
         AgentName.GP,
         gp_router,
         {
-            AgentName.PORTFOLIO: AgentName.PORTFOLIO,  # Macro 검수 완료 후 이동
-            AgentName.RISK: AgentName.RISK,  # Portfolio 검수 완료 후 이동
-            AgentName.ALPHA: AgentName.ALPHA,  # Risk 검수 완료 후 이동
+            AgentName.RISK: AgentName.RISK,  # Macro 검수 완료 후 이동
+            AgentName.PORTFOLIO: AgentName.PORTFOLIO,  # Risk 검수 완료 후 이동
+            AgentName.ALPHA: AgentName.ALPHA,  # Portfolio 검수 완료 후 이동
             AgentName.CIO: AgentName.CIO,  # 모든 검수 통과 시 최종 리포트 작성
         },
     )

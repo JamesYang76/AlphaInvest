@@ -68,7 +68,8 @@ cp .env.example .env
 > - `FRED_API_KEY` : (필수) FRED 거시경제 데이터
 > - `TAVILY_API_KEY` : (필수) Tavily Web Search
 > - `OPENAI_API_KEY` : (필수) OpenAI LLM
-> - `NOTION_API_KEY` : (선택) Notion 페이지 발행
+> - `NOTION_API_KEY` : (필수) Notion 페이지 발행
+> - `NOTION_DATABASE_ID` : (필수) Notion 페이지 발행
 
 ### 3) 에이전트 실행
 모든 설정이 완료되면 메인 파일을 실행하여 리포트 생성을 시작합니다.
