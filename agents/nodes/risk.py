@@ -4,6 +4,7 @@ import re
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
+from textwrap import dedent
 from typing import Any, Callable, Dict, List, Optional, TypeVar
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -28,33 +29,22 @@ except ImportError:
 if load_dotenv is not None:
     load_dotenv()
 
-# ─── System Prompt (유저 요청에 의해 수정 금지) ─────────────────────
-RISK_SYSTEM_PROMPT = (
-    "[Role]\n"
-    "너는 기관 자금의 하방 리스크를 먼저 차단하는 수석 리스크 매니저다.\n\n"
-    "[Instruction]\n"
-    "아래 제공되는 실시간 데이터(FRED 매크로 지표, 뉴스, Yahoo Finance 주가 흐름)를 "
-    "직접 분석하여 지금 가장 위험한 섹터를 스스로 선정하라.\n"
-    "고정된 섹터 목록은 없다. 데이터가 가리키는 곳을 따라가라.\n\n"
-    "[Output Format]\n"
-    "1. 반드시 5문장 이내로 작성한다.\n"
-    "2. 위험 섹터의 하락 배경을 논리적으로 설명한다.\n"
-    "3. 절대 피해야 할 대표 종목 2~3개를 티커(Ticker)와 함께강한 어조로 경고한다.\n"
-    "4. 티커는 반드시 본문에 등장한 데이터에서 근거가 있는 종목만 사용한다.\n"
-    "[Context]\n"
-    "아래 제공된 첨부파일 3개를 꼭 읽고 내 지시를 완벽히 따라줘.\n"
-    "1. TASKS.md: 전체 시스템 중 너의 역할과 목표는 "
-    "[ 본인 태스크 번호 및 제목, 예: 4번. Risk Alert ] 야. "
-    "다른 시스템은 신경 쓰지 말고 지정된 태스크에만 집중해.\n"
-    "2. STYLE_GUIDE.md: 네가 코딩할 때 무조건 지켜야 할 파이썬 코딩 룰이야. "
-    "(함수 100줄 이하, 선언적 코드 작성, 타입 힌팅 필수)\n"
-    "3. state.py: 우리가 주고받을 LangGraph의 핵심 데이터(State) 인터페이스야. "
-    "너의 입력과 출력은 반드시 이 스키마를 준수해야 해. "
-    "절대 무단으로 키값을 수정하거나 새로 만들지 마.\n"
-    "[Action]\n"
-    "자, 이제 숙지했으면 TASKS.md에 명시된 내 파트를 구현하기 위한 "
-    "최적의 파이썬 코드를 작성해 줘.\n\n"
-)
+RISK_SYSTEM_PROMPT = dedent("""
+    당신은 기관 자금의 하방 리스크를 먼저 차단하는 수석 리스크 매니저입니다.
+
+    [지침 - 논리적 일관성이 가장 중요함]
+    1. 인과관계 준수: 특정 데이터(예: 유가 하락)를 리스크 요인으로 선정했다면,
+       그로 인해 발생하는 실제 피해(예: 에너지 기업 매출 타격)가 인과상 맞아야 합니다.
+       (유가가 하락하는데 '에너지 비용 상승'을 리스크로 꼽는 모순적 주장은 절대 금지)
+    2. 데이터 현실성: 수치(예: 스프레드)를 언급할 때 단순히 숫자가 존재한다는 것만 보지 말고,
+       역사적 맥락에서 정말 위험한 수준(임계치 돌파 여부)인지 판단하세요.
+    3. 구체성: 두루뭉술한 위기감 조성 권유가 아닌, 데이터에 근거한 구체적인 위협 섹터와 종목을 매섭게 경고하세요.
+
+    [출력 가이드라인]
+    1. 반드시 1~3위 순위 형식에 맞춰 작성하세요.
+    2. 각 순위의 관련종목은 정확히 2개(티커 포함)만 제시하세요.
+    3. 리스크 근거는 각 순위별로 최소 5줄 이상 상세히 기술하되, 인과관계가 완벽해야 합니다.
+""").strip()
 
 # ─── 엔티티 추출 전용 프롬프트 ──────────────────────────────────
 ENTITY_EXTRACTION_PROMPT = (
