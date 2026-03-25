@@ -1,6 +1,5 @@
 import json
 import re
-from statistics import mean
 from typing import Any, Dict, List
 
 from langchain_core.prompts import ChatPromptTemplate
@@ -14,7 +13,13 @@ def _extract_json_from_response(content: str) -> Dict[str, Any]:
     """
     if not content:
         return {
-            "overall_score": 0.0,
+            "signal": "neutral",
+            "confidence": "low",
+            "verdict": "fail",
+            "framework_review": {},
+            "strengths": [],
+            "weaknesses": [],
+            "improvement_suggestions": [],
             "reasoning": "Empty response from judge",
             "raw": content,
         }
@@ -35,7 +40,13 @@ def _extract_json_from_response(content: str) -> Dict[str, Any]:
         return json.loads(text)
     except Exception:
         return {
-            "overall_score": 0.0,
+            "signal": "neutral",
+            "confidence": "low",
+            "verdict": "fail",
+            "framework_review": {},
+            "strengths": [],
+            "weaknesses": [],
+            "improvement_suggestions": [],
             "reasoning": "JSON parsing failed",
             "raw": content,
         }
@@ -44,14 +55,25 @@ def _extract_json_from_response(content: str) -> Dict[str, Any]:
 def evaluate_with_llm_judge(report: str, style_guide_path: str = "STYLE_GUIDE.md") -> Dict[str, Any]:
     """
     CIO 최종 리포트에 대해 LLM-as-a-Judge 방식의 정성 평가를 수행합니다.
-    유저스토리 기준에 맞춰 '돈 내고 읽을 가치(PMF)'를 5점 만점으로 평가합니다.
+    점수형이 아닌 프레임워크 기반 정성 평가를 반환합니다.
     """
     if not report or not report.strip():
         return {
-            "overall_score": 0.0,
-            "criteria_scores": {},
+            "signal": "neutral",
+            "confidence": "low",
+            "verdict": "fail",
+            "framework_review": {
+                "thesis_quality": "",
+                "risk_balance": "",
+                "consistency": "",
+                "actionability": "",
+                "expert_tone": "",
+                "readability": "",
+            },
+            "strengths": [],
+            "weaknesses": [],
+            "improvement_suggestions": [],
             "reasoning": "평가할 리포트가 비어 있습니다.",
-            "paid_willingness": "no",
         }
 
     llm = get_llm(temperature=0.1)
@@ -68,48 +90,78 @@ def evaluate_with_llm_judge(report: str, style_guide_path: str = "STYLE_GUIDE.md
                 "system",
                 """
 당신은 투자 리포트의 품질을 평가하는 AI 심사관입니다.
+As an AI 시스템 설계자,
+I want LLM을 심사관(LLM-as-a-Judge)으로 활용하여
+생성된 투자 리포트를 아래 기준대로 판단하고,
+So that 사람이 일일이 검토하지 않아도
+리포트가 안정적이고 신뢰 가능한 수준으로 생성되었는지에 대해
+정성적인 평가를 얻고 싶다.
 
-당신의 역할은 아래 리포트가
-"신뢰 가능한 투자 판단 자료로 활용 가능한 수준인지"를 평가하는 것입니다.
+1. thesis_quality
+- 핵심 투자 아이디어가 대체로 보이는가
+- 단순 나열을 넘어서 왜 이런 판단이 나왔는지 어느 정도 설명되는가
 
-다음 기준을 바탕으로 평가하세요:
+2. risk_balance
+- 긍정적인 내용만 있지 않고 리스크도 함께 다루는가
+- 전체적으로 한쪽으로 과도하게 치우치지 않는가
 
-1. 논리성 (logic)
-- 주장과 근거가 자연스럽게 연결되는가
+3. consistency
+- 리포트 안의 주요 섹션들이 크게 모순되지 않는가
+- 전체 흐름이 대체로 자연스러운가
 
-2. 설득력 (persuasiveness)
-- 투자 판단이 납득 가능한가
+4. actionability
+- 투자자가 읽고 어느 정도 참고할 만한 방향성이 있는가
+- 완벽하지 않아도 실질적인 시사점이 있는가
 
-3. 전문성 (expert_tone)
-- 경제/투자 리포트로서 적절한 톤을 유지하는가
+추가로 아래도 함께 고려하세요:
+- expert_tone: 투자 리포트다운 차분한 문체인지
+- readability: 너무 복잡하지 않고 읽기 편안한지
 
-4. 가독성 (readability)
-- 문장이 명확하고 읽기 쉬운가
+평가 원칙:
+- 프로젝트 결과물이라는 점을 감안하세요
+- 치명적인 모순이나 매우 부정확한 구조가 아니면 너무 엄격하게 fail 주지 마세요
+- JSON 외의 텍스트는 출력하지 마세요
+- 코드블록 없이 JSON만 출력하세요
+- strengths, weaknesses, improvement_suggestions는 각각 1개 이상 작성하세요
+- reasoning은 3~5문장 정도로 간단히 작성하세요
 
-5. 일관성 (consistency)
-- 리포트 전체에 모순 없이 일관된 메시지를 전달하는가
+signal 기준:
+- "positive": 구조와 내용이 전반적으로 무난하고 참고할 가치가 있음
+- "neutral": 기본 형태는 갖췄지만 설명력이나 구체성이 다소 부족함
+- "negative": 핵심 흐름이 어색하거나 참고자료로 쓰기 어려운 문제가 큼
 
-다음 규칙을 반드시 지키세요:
+confidence 기준:
+- "high": 판단이 비교적 분명함
+- "medium": 대체로 판단 가능함
+- "low": 내용이 너무 부족하거나 모호함
 
-- 모든 점수는 1.0 ~ 5.0 사이의 소수점 한 자리로 평가하세요
-- overall_score는 전체적인 품질을 종합한 점수입니다
-- JSON 형식 외의 텍스트는 절대 출력하지 마세요
-- 코드블록(```), 설명문 없이 JSON만 출력하세요
+verdict 기준:
+- "pass": 프로젝트 결과물 기준에서 참고 가능한 수준
+- "fail": 기본 구조나 내용 보완이 더 필요한 수준
 
 아래 형식으로만 응답하세요:
 
 {{
-  "overall_score": 0.0,
-  "criteria_scores": {{
-    "logic": 0.0,
-    "persuasiveness": 0.0,
-    "expert_tone": 0.0,
-    "readability": 0.0,
-    "consistency": 0.0
+  "signal": "positive / neutral / negative",
+  "confidence": "high / medium / low",
+  "verdict": "pass / fail",
+  "framework_review": {{
+    "thesis_quality": "...",
+    "risk_balance": "...",
+    "consistency": "...",
+    "actionability": "...",
+    "expert_tone": "...",
+    "readability": "..."
   }},
-  "verdict": "pass/fail",
-  "strengths": ["...","..."],
-  "weaknesses": ["...","..."],
+  "strengths": [
+    "..."
+  ],
+  "weaknesses": [
+    "..."
+  ],
+  "improvement_suggestions": [
+    "..."
+  ],
   "reasoning": "..."
 }}
 
@@ -122,6 +174,7 @@ def evaluate_with_llm_judge(report: str, style_guide_path: str = "STYLE_GUIDE.md
 - 안정적이고 보수적인 리포트는 오히려 긍정적으로 평가하세요
 - 일반적인 수준의 투자 조언도 논리와 일관성이 있으면 높은 점수를 줄 수 있습니다
             """.strip(),
+                """.strip(),
             ),
             (
                 "user",
@@ -132,6 +185,7 @@ def evaluate_with_llm_judge(report: str, style_guide_path: str = "STYLE_GUIDE.md
 [평가 대상 리포트]
 {report}
             """.strip(),
+                """.strip(),
             ),
         ]
     )
@@ -146,16 +200,33 @@ def evaluate_with_llm_judge(report: str, style_guide_path: str = "STYLE_GUIDE.md
 
     parsed = _extract_json_from_response(response.content)
 
-    parsed = _extract_json_from_response(response.content)
-
     # 기본값 보정
-    parsed.setdefault("overall_score", 0.0)
-    parsed.setdefault("criteria_scores", {})
-    parsed.setdefault("paid_willingness", "no")
+    parsed.setdefault("signal", "neutral")
+    parsed.setdefault("confidence", "medium")
     parsed.setdefault("verdict", "fail")
+
+    parsed.setdefault("framework_review", {})
+    if not isinstance(parsed["framework_review"], dict):
+        parsed["framework_review"] = {}
+
+    parsed["framework_review"].setdefault("thesis_quality", "")
+    parsed["framework_review"].setdefault("risk_balance", "")
+    parsed["framework_review"].setdefault("consistency", "")
+    parsed["framework_review"].setdefault("actionability", "")
+    parsed["framework_review"].setdefault("expert_tone", "")
+    parsed["framework_review"].setdefault("readability", "")
+
     parsed.setdefault("strengths", [])
     parsed.setdefault("weaknesses", [])
+    parsed.setdefault("improvement_suggestions", [])
     parsed.setdefault("reasoning", "No reasoning provided")
+
+    if not isinstance(parsed["strengths"], list):
+        parsed["strengths"] = [str(parsed["strengths"])]
+    if not isinstance(parsed["weaknesses"], list):
+        parsed["weaknesses"] = [str(parsed["weaknesses"])]
+    if not isinstance(parsed["improvement_suggestions"], list):
+        parsed["improvement_suggestions"] = [str(parsed["improvement_suggestions"])]
 
     return parsed
 
@@ -166,8 +237,7 @@ def evaluate_with_llm_judge_average(
     num_runs: int = 3,
 ) -> Dict[str, Any]:
     """
-    동일 리포트에 대해 LLM Judge를 여러 번 실행하고 평균 점수를 계산합니다.
-    Acceptance Criteria의 '3~5개 테스트 런 평균 평점' 용도입니다.
+    동일 리포트에 대해 LLM Judge를 여러 번 실행하고 결과를 집계합니다.
     """
     runs: List[Dict[str, Any]] = []
 
@@ -176,30 +246,51 @@ def evaluate_with_llm_judge_average(
         runs.append(result)
 
     valid_scores = [float(r.get("overall_score", 0.0)) for r in runs if isinstance(r.get("overall_score", 0.0), (int, float))]
-
-    criteria_names = ["logic", "persuasiveness", "expert_tone", "readability", "consistency"]
-    criteria_avg = {}
-
-    for name in criteria_names:
-        scores = []
-        for r in runs:
-            criteria = r.get("criteria_scores", {})
-            value = criteria.get(name)
-            if isinstance(value, (int, float)):
-                scores.append(float(value))
-        criteria_avg[name] = round(mean(scores), 2) if scores else 0.0
-
-    avg_score = round(mean(valid_scores), 2) if valid_scores else 0.0
     pass_count = sum(1 for r in runs if r.get("verdict") == "pass")
-    yes_count = sum(1 for r in runs if r.get("paid_willingness") == "yes")
+    signal_counts = {
+        "positive": sum(1 for r in runs if r.get("signal") == "positive"),
+        "neutral": sum(1 for r in runs if r.get("signal") == "neutral"),
+        "negative": sum(1 for r in runs if r.get("signal") == "negative"),
+    }
+    confidence_counts = {
+        "high": sum(1 for r in runs if r.get("confidence") == "high"),
+        "medium": sum(1 for r in runs if r.get("confidence") == "medium"),
+        "low": sum(1 for r in runs if r.get("confidence") == "low"),
+    }
+
+    framework_fields = [
+        "thesis_quality",
+        "risk_balance",
+        "consistency",
+        "actionability",
+        "expert_tone",
+        "readability",
+    ]
+
+    framework_summary: Dict[str, List[str]] = {}
+    for field in framework_fields:
+        values = []
+        for r in runs:
+            framework = r.get("framework_review", {})
+            if isinstance(framework, dict):
+                value = framework.get(field)
+                if isinstance(value, str) and value.strip():
+                    values.append(value.strip())
+        framework_summary[field] = values
+
+    final_signal = max(signal_counts, key=signal_counts.get) if runs else "neutral"
+    final_confidence = max(confidence_counts, key=confidence_counts.get) if runs else "low"
+    final_verdict = "pass" if pass_count >= ((num_runs + 1) // 2) else "fail"
 
     return {
-        "overall_score_avg": avg_score,
-        "criteria_scores_avg": criteria_avg,
         "num_runs": num_runs,
         "pass_rate": round(pass_count / num_runs, 2) if num_runs else 0.0,
-        "paid_willingness_rate": round(yes_count / num_runs, 2) if num_runs else 0.0,
-        "final_verdict": "pass" if avg_score >= 4.0 else "fail",
+        "signal_distribution": signal_counts,
+        "confidence_distribution": confidence_counts,
+        "final_signal": final_signal,
+        "final_confidence": final_confidence,
+        "final_verdict": final_verdict,
+        "framework_summary": framework_summary,
         "runs": runs,
     }
 
@@ -210,3 +301,26 @@ def check_hallucination(report: str, context_data: Dict[str, Any]) -> float:
     현재는 placeholder입니다.
     """
     return 1.0
+
+
+if __name__ == "__main__":
+    sample_report = """
+# [2026-03-25] 일일 투자 전략 리포트
+
+## I. 거시경제 시황
+금리는 높은 수준에서 유지되고 있으며 인플레이션 둔화 흐름이 이어지고 있다.
+
+## II. 포트폴리오 진단
+Apple은 높은 수익률을 기록했지만 밸류에이션 부담이 존재한다.
+
+## III. 리스크 경고
+에너지 시장 변동성과 고용 시장 불확실성이 존재한다.
+
+## IV. 투자 기회
+금융 및 기술 섹터 중심으로 안정적인 성장 가능성이 있다.
+"""
+
+    result = evaluate_with_llm_judge(sample_report)
+
+    print("\n=== LLM Judge Result ===")
+    print(json.dumps(result, indent=2, ensure_ascii=False))
