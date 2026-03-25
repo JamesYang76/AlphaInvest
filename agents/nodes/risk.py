@@ -1012,7 +1012,47 @@ def risk_node(state: AgentState) -> Dict[str, Any]:
     )
 
     # ── Step 1: 데이터 수집 (기존 위험 뉴스 + 테마 뉴스) ──
+    # IMPORTANT:
+    #   macro.py에서 state[StateKey.MACRO_RESULT]로 전달된 매크로 요약을
+    #   risk의 evidence 생성에도 동일하게 반영해야 합니다.
+    #   그래서 macro_context의 "values"는 그대로 쓰되, "summary"만 state의 macro_result로 덮어씁니다.
     macro = _build_macro_context()
+    if isinstance(macro_result, str) and macro_result.strip() and macro_result != "매크로 요약 없음":
+        macro["summary"] = macro_result
+
+    # A안: macro.py에서 state[StateKey.MACRO_DATA]로 전달된 거시 값이 있으면
+    # risk의 점수 계산/판정에도 동일하게 반영합니다(가능한 키만 override, 없으면 fallback 유지).
+    macro_values = macro.get("values", {})
+    macro_data = state.get(StateKey.MACRO_DATA, {})
+    if isinstance(macro_data, dict) and macro_data:
+
+        def _as_float(v: Any) -> Optional[float]:
+            if v is None:
+                return None
+            if isinstance(v, (int, float)):
+                return float(v)
+            if isinstance(v, str):
+                cleaned = v.replace("%", "").strip()
+                try:
+                    return float(cleaned)
+                except ValueError:
+                    return None
+            return None
+
+        # risk.py가 기대하는 keys: fed_funds_rate, ten_year_yield, high_yield_spread
+        fed_rate = _as_float(macro_data.get("d_fed_rate")) or _as_float(macro_data.get("fed_rate"))
+        ten_year = _as_float(macro_data.get("ten_year_yield"))
+        hy_spread = _as_float(macro_data.get("high_yield_spread"))
+
+        if fed_rate is not None:
+            macro_values["fed_funds_rate"] = fed_rate
+        if ten_year is not None:
+            macro_values["ten_year_yield"] = ten_year
+        if hy_spread is not None:
+            macro_values["high_yield_spread"] = hy_spread
+
+        macro["values"] = macro_values
+
     articles = _fetch_news_articles("US stock market sector risk downgrade credit default earnings miss refinancing pressure 2026")
     theme_articles = _fetch_theme_news()
 
