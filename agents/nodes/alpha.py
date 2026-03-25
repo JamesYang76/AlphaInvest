@@ -36,7 +36,7 @@ def _discover_current_themes(llm: Any) -> List[SectorRule]:
     logger.info("🔍 실시간 뉴스에서 가장 핫한 투자 테마 TOP 5 발굴 중...")
 
     # 1. 최신 주도주/테마 뉴스 검색
-    query = "Hottest 5 investment themes and leading sectors in US and Korea stock markets today"
+    query = "Hottest 10 investment themes and leading sectors in US and Korea stock markets today"
     news_context = fetch_news(query)
 
     # 2. LLM을 통한 5개 테마 구조화

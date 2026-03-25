@@ -10,14 +10,10 @@ graph TD;
 	gp_agent(gp_agent)
 	cio_agent(cio_agent)
 	__end__([__end__]):::last
-	__start__ --> alpha_agent;
 	__start__ --> macro_agent;
-	__start__ --> portfolio_agent;
-	__start__ --> risk_agent;
 	alpha_agent --> gp_agent;
 	gp_agent -.-> alpha_agent;
 	gp_agent -.-> cio_agent;
-	gp_agent -.-> macro_agent;
 	gp_agent -.-> portfolio_agent;
 	gp_agent -.-> risk_agent;
 	macro_agent --> gp_agent;
