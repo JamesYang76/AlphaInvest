@@ -67,17 +67,36 @@ def evaluate_with_llm_judge(report: str, style_guide_path: str = "STYLE_GUIDE.md
         (
             "system",
             """
-당신은 유료 투자 리서치 리포트를 심사하는 수석 에디터이자 PMF 평가 위원입니다.
+당신은 투자 리포트의 품질을 평가하는 AI 심사관입니다.
 
-당신의 임무는 아래 리포트가
-1) 스타일 가이드를 잘 따르는지,
-2) 경제/투자 전문가 페르소나가 잘 드러나는지,
-3) 논리적이고 설득력 있는지,
-4) 실제로 돈을 내고 읽을 만한 수준인지
-를 평가하는 것입니다.
+당신의 역할은 아래 리포트가
+"신뢰 가능한 투자 판단 자료로 활용 가능한 수준인지"를 평가하는 것입니다.
 
-반드시 아래 JSON 형식으로만 답하세요.
-설명문, 코드블록, 백틱 없이 JSON 객체만 출력하세요.
+다음 기준을 바탕으로 평가하세요:
+
+1. 논리성 (logic)
+- 주장과 근거가 자연스럽게 연결되는가
+
+2. 설득력 (persuasiveness)
+- 투자 판단이 납득 가능한가
+
+3. 전문성 (expert_tone)
+- 경제/투자 리포트로서 적절한 톤을 유지하는가
+
+4. 가독성 (readability)
+- 문장이 명확하고 읽기 쉬운가
+
+5. 일관성 (consistency)
+- 리포트 전체에 모순 없이 일관된 메시지를 전달하는가
+
+다음 규칙을 반드시 지키세요:
+
+- 모든 점수는 1.0 ~ 5.0 사이의 소수점 한 자리로 평가하세요
+- overall_score는 전체적인 품질을 종합한 점수입니다
+- JSON 형식 외의 텍스트는 절대 출력하지 마세요
+- 코드블록(```), 설명문 없이 JSON만 출력하세요
+
+아래 형식으로만 응답하세요:
 
 {{
   "overall_score": 0.0,
@@ -86,26 +105,22 @@ def evaluate_with_llm_judge(report: str, style_guide_path: str = "STYLE_GUIDE.md
     "persuasiveness": 0.0,
     "expert_tone": 0.0,
     "readability": 0.0,
-    "pmf_paid_value": 0.0
+    "consistency": 0.0
   }},
-  "paid_willingness": "yes/no",
   "verdict": "pass/fail",
   "strengths": ["...","..."],
   "weaknesses": ["...","..."],
   "reasoning": "..."
 }}
 
-평가 규칙:
-- 모든 점수는 1.0 ~ 5.0 사이의 소수점 한 자리까지 허용
-- overall_score는 전체 인상을 반영한 최종 점수
-- paid_willingness:
-  - yes = 돈 내고 볼 가치가 있다
-  - no = 아직 부족하다
-- verdict:
-  - pass = overall_score가 4.0 이상
-  - fail = overall_score가 4.0 미만
-- 리포트가 형식만 맞고 매력/설득력이 약하면 낮게 평가하세요.
-- 지나치게 일반론적이거나 근거 없는 단정은 감점하세요.
+판정 기준:
+- overall_score ≥ 4.0 → pass
+- overall_score < 4.0 → fail
+
+중요:
+- 과도하게 공격적인 투자 의견이 없어도 감점하지 마세요
+- 안정적이고 보수적인 리포트는 오히려 긍정적으로 평가하세요
+- 일반적인 수준의 투자 조언도 논리와 일관성이 있으면 높은 점수를 줄 수 있습니다
             """.strip(),
         ),
         (
@@ -128,6 +143,8 @@ def evaluate_with_llm_judge(report: str, style_guide_path: str = "STYLE_GUIDE.md
             "report": report,
         }
     )
+
+    parsed = _extract_json_from_response(response.content)
 
     parsed = _extract_json_from_response(response.content)
 
@@ -164,7 +181,7 @@ def evaluate_with_llm_judge_average(
         if isinstance(r.get("overall_score", 0.0), (int, float))
     ]
 
-    criteria_names = ["logic", "persuasiveness", "expert_tone", "readability", "pmf_paid_value"]
+    criteria_names = ["logic", "persuasiveness", "expert_tone", "readability", "consistency"]
     criteria_avg = {}
 
     for name in criteria_names:
