@@ -11,7 +11,7 @@ TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 FRED_API_KEY = os.getenv("FRED_API_KEY", "")
 
 
-def get_llm(model: str = "gpt-4o", temperature: float = 0.7) -> ChatOpenAI:
+def get_llm(model: str = "gpt-5.4-mini", temperature: float = 0.7) -> ChatOpenAI:
     """LLM 인스턴스 반환"""
     return ChatOpenAI(
         model=model,
