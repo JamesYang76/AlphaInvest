@@ -21,7 +21,7 @@ def gp_node(state: AgentState) -> Dict[str, Any]:
     제출된 분석 리포트를 전문가의 관점에서 심사/검수하며,
     결함 발견 시 즉시 직접 수정(Auto-Repair)하여 최종 결과를 반환합니다.
     """
-    llm = get_llm(model="gpt-5.4-mini", temperature=0.0)
+    llm = get_llm(model="gpt-5.4-nano", temperature=0.0)
     last_node = state.get("last_node", "알 수 없음")
 
     # 데이터 확보
@@ -45,11 +45,15 @@ def gp_node(state: AgentState) -> Dict[str, Any]:
 
                     ---
                     [실시간 참조 데이터 (심사 팩트체크 기준)]
-                    - 주요 지표 수치: {macro_data_str}
+                    - 거시경제 주요 지표 수치: {macro_data_str}
                     - 거시경제 시황 요약: {macro_result}
 
                     ---
-                    지침: 위 '실시간 참조 데이터'와 상충되는 치명적인 팩트 오류가 있는지 확인하고 JSON으로 답변하세요.
+                    [지침]
+                    1. '실시간 참조 데이터'와 상충되는 치명적인 팩트 오류가 있는지 확인하고 JSON으로 답변하세요.
+                    2. 주의:
+                       - 보고서에 포함된 개별 종목의 수치(PER, ROE, 매입가, 수익률, 손실률 등)는 시스템 외부에서 실시간으로 수집된 정당한 데이터입니다. 
+                       - 이 수치들이 '실시간 참조 데이터(거시)'에 없다는 이유만으로 '팩트 오류'로 판정하지 마십시오.
                 """).strip(),
             ),
         ]
