@@ -1,61 +1,199 @@
-from typing import Any, Dict
+import json
+import re
+from statistics import mean
+from typing import Any, Dict, List
 
 from langchain_core.prompts import ChatPromptTemplate
 
 from data.fetchers import get_llm
 
 
+def _extract_json_from_response(content: str) -> Dict[str, Any]:
+    """
+    LLM 응답에서 JSON 부분만 최대한 안정적으로 추출합니다.
+    """
+    if not content:
+        return {
+            "overall_score": 0.0,
+            "reasoning": "Empty response from judge",
+            "raw": content,
+        }
+
+    text = content.strip()
+
+    # ```json ... ``` 제거
+    text = re.sub(r"^```json\s*", "", text, flags=re.IGNORECASE)
+    text = re.sub(r"^```\s*", "", text)
+    text = re.sub(r"\s*```$", "", text)
+
+    # 가장 바깥 JSON 객체 추출 시도
+    match = re.search(r"\{.*\}", text, flags=re.DOTALL)
+    if match:
+        text = match.group(0)
+
+    try:
+        return json.loads(text)
+    except Exception:
+        return {
+            "overall_score": 0.0,
+            "reasoning": "JSON parsing failed",
+            "raw": content,
+        }
+
+
 def evaluate_with_llm_judge(report: str, style_guide_path: str = "STYLE_GUIDE.md") -> Dict[str, Any]:
     """
-    LLM-as-a-Judge: 실제 생성된 리포트가 스타일 가이드와 거시경제 애널리스트 페르소나를
-    얼마나 잘 지켰는지 '정성 평가'를 수행합니다.
+    CIO 최종 리포트에 대해 LLM-as-a-Judge 방식의 정성 평가를 수행합니다.
+    유저스토리 기준에 맞춰 '돈 내고 읽을 가치(PMF)'를 5점 만점으로 평가합니다.
     """
-    llm = get_llm(temperature=0.1)  # 평가용 LLM은 일관성을 위해 낮은 온도로 설정
+    if not report or not report.strip():
+        return {
+            "overall_score": 0.0,
+            "criteria_scores": {},
+            "reasoning": "평가할 리포트가 비어 있습니다.",
+            "paid_willingness": "no",
+        }
 
-    # 실제 스타일 가이드 로드 (단순화된 형태)
-    with open(style_guide_path, "r", encoding="utf-8") as f:
-        style_content = f.read()
+    llm = get_llm(temperature=0.1)
+
+    try:
+        with open(style_guide_path, "r", encoding="utf-8") as f:
+            style_content = f.read()
+    except FileNotFoundError:
+        style_content = "격식 있는 투자 리포트 문체, 문단형 서술, 섹션 구조 유지, 전문가 톤 유지"
 
     prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                "당신은 투자 리포트 품질 평가 위원입니다. "
-                "생성된 리포트가 아래 스타일 가이드를 준수했는지 비판적으로 평가하고 1~10점 사이의 점수를 부여하세요. "
-                "반드시 JSON 형식으로 응답하세요: {{'score': float, 'reasoning': str}}",
-            ),
-            (
-                "user",
-                "[스타일 가이드]\n{style_content}\n\n[평가할 리포트]\n{report}",
-            ),
-        ]
-    )
+    [
+        (
+            "system",
+            """
+당신은 유료 투자 리서치 리포트를 심사하는 수석 에디터이자 PMF 평가 위원입니다.
 
-    evaluate_chain = prompt | llm
-    response = evaluate_chain.invoke(
+당신의 임무는 아래 리포트가
+1) 스타일 가이드를 잘 따르는지,
+2) 경제/투자 전문가 페르소나가 잘 드러나는지,
+3) 논리적이고 설득력 있는지,
+4) 실제로 돈을 내고 읽을 만한 수준인지
+를 평가하는 것입니다.
+
+반드시 아래 JSON 형식으로만 답하세요.
+설명문, 코드블록, 백틱 없이 JSON 객체만 출력하세요.
+
+{{
+  "overall_score": 0.0,
+  "criteria_scores": {{
+    "logic": 0.0,
+    "persuasiveness": 0.0,
+    "expert_tone": 0.0,
+    "readability": 0.0,
+    "pmf_paid_value": 0.0
+  }},
+  "paid_willingness": "yes/no",
+  "verdict": "pass/fail",
+  "strengths": ["...","..."],
+  "weaknesses": ["...","..."],
+  "reasoning": "..."
+}}
+
+평가 규칙:
+- 모든 점수는 1.0 ~ 5.0 사이의 소수점 한 자리까지 허용
+- overall_score는 전체 인상을 반영한 최종 점수
+- paid_willingness:
+  - yes = 돈 내고 볼 가치가 있다
+  - no = 아직 부족하다
+- verdict:
+  - pass = overall_score가 4.0 이상
+  - fail = overall_score가 4.0 미만
+- 리포트가 형식만 맞고 매력/설득력이 약하면 낮게 평가하세요.
+- 지나치게 일반론적이거나 근거 없는 단정은 감점하세요.
+            """.strip(),
+        ),
+        (
+            "user",
+            """
+[스타일 가이드]
+{style_content}
+
+[평가 대상 리포트]
+{report}
+            """.strip(),
+        ),
+    ]
+)
+
+    chain = prompt | llm
+    response = chain.invoke(
         {
-            "style_content": style_content[:1000],  # 용량 최적화
+            "style_content": style_content[:2000],
             "report": report,
         }
     )
 
-    # JSON 파싱 로직 개선 (마크다운 백틱 제거 및 유연한 파싱)
-    try:
-        import json
-        import re
+    parsed = _extract_json_from_response(response.content)
 
-        content = response.content
-        # ```json ... ``` 형태의 백틱 제거
-        json_str = re.sub(r"```json\s?|\s?```", "", content).strip()
-        return json.loads(json_str)
-    except Exception as e:
-        return {"score": 0, "reasoning": f"JSON 파싱 실패: {str(e)}", "raw": response.content}
+    # 기본값 보정
+    parsed.setdefault("overall_score", 0.0)
+    parsed.setdefault("criteria_scores", {})
+    parsed.setdefault("paid_willingness", "no")
+    parsed.setdefault("verdict", "fail")
+    parsed.setdefault("strengths", [])
+    parsed.setdefault("weaknesses", [])
+    parsed.setdefault("reasoning", "No reasoning provided")
+
+    return parsed
+
+
+def evaluate_with_llm_judge_average(
+    report: str,
+    style_guide_path: str = "STYLE_GUIDE.md",
+    num_runs: int = 3,
+) -> Dict[str, Any]:
+    """
+    동일 리포트에 대해 LLM Judge를 여러 번 실행하고 평균 점수를 계산합니다.
+    Acceptance Criteria의 '3~5개 테스트 런 평균 평점' 용도입니다.
+    """
+    runs: List[Dict[str, Any]] = []
+
+    for _ in range(num_runs):
+        result = evaluate_with_llm_judge(report, style_guide_path=style_guide_path)
+        runs.append(result)
+
+    valid_scores = [
+        float(r.get("overall_score", 0.0))
+        for r in runs
+        if isinstance(r.get("overall_score", 0.0), (int, float))
+    ]
+
+    criteria_names = ["logic", "persuasiveness", "expert_tone", "readability", "pmf_paid_value"]
+    criteria_avg = {}
+
+    for name in criteria_names:
+        scores = []
+        for r in runs:
+            criteria = r.get("criteria_scores", {})
+            value = criteria.get(name)
+            if isinstance(value, (int, float)):
+                scores.append(float(value))
+        criteria_avg[name] = round(mean(scores), 2) if scores else 0.0
+
+    avg_score = round(mean(valid_scores), 2) if valid_scores else 0.0
+    pass_count = sum(1 for r in runs if r.get("verdict") == "pass")
+    yes_count = sum(1 for r in runs if r.get("paid_willingness") == "yes")
+
+    return {
+        "overall_score_avg": avg_score,
+        "criteria_scores_avg": criteria_avg,
+        "num_runs": num_runs,
+        "pass_rate": round(pass_count / num_runs, 2) if num_runs else 0.0,
+        "paid_willingness_rate": round(yes_count / num_runs, 2) if num_runs else 0.0,
+        "final_verdict": "pass" if avg_score >= 4.0 else "fail",
+        "runs": runs,
+    }
 
 
 def check_hallucination(report: str, context_data: Dict[str, Any]) -> float:
     """
-    Hallucination(환각) 발생 여부를 확인합니다.
-    (Macro data 리스트 등 원본 데이터와 리포트 내용이 충돌하는지 체크)
+    추후 확장용 함수.
+    현재는 placeholder입니다.
     """
-    # ... GP 노드의 로직을 활용하거나 추가적인 별도 LLM 검증 가능 ...
-    return 1.0  # (임시)
+    return 1.0
