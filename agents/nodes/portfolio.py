@@ -25,7 +25,7 @@ PORTFOLIO_SYSTEM_PROMPT = dedent("""
     1. 개별 종목 간결 진단 (중요): 각 보유 종목별로 현재 시황과 데이터에 근거하여 **3~4줄 내외**로 아주 깔끔하게 핵심만 진단하십시오.
     2. 보유/교체(Hold or Switch) 우선 판단: 현재 포트폴리오가 기회 요인(AI, 에너지 등)에 잘 부합하고
        펀더멘털이 우수하다면, 무리한 교체 대신 보유(HOLD) 전략을 권고하고 그 이유를 설명하세요.
-    3. 리밸런싱 제안: 만약 교체가 필요하다면 상관관계가 낮은 섹터를 제안하여 리스크를 분산시켜야 합니다.
+    3. 리밸런싱 제안: 만약 교체가 필요하다면 반드시 **리스크 매니저(Risk Agent)가 경고한 섹터와 종목은 제외**하고, 상관관계가 낮은 안전한 섹터를 제안하여 리스크를 분산시켜야 합니다.
     4. 전문적 소통: 단호하고 품격 있는 PB의 어조로 마크다운 리포트 형태로 작성하세요.
 """).strip()
 
@@ -46,8 +46,9 @@ def portfolio_node(state: AgentState) -> Dict[str, Any]:
     user_portfolio = state.get(StateKey.USER_PORTFOLIO, [])
     enriched_portfolio = enrich_portfolio_data(user_portfolio)
 
-    # 💡 4. 현재 확보된 데이터: Macro 분석 결과만 활용 (순차 단계상 Risk, Alpha 전)
+    # 💡 4. 현재 확보된 데이터: Macro 및 Risk 분석 결과 활용 (순차 단계상 Macro -> Risk 이후)
     macro_info = state.get(StateKey.MACRO_RESULT, "거시 경제 분석 데이터가 아직 확보되지 않았습니다.")
+    risk_info = state.get(StateKey.RISK_RESULT, "리스크 분석 데이터가 아직 확보되지 않았습니다.")
 
     # 보유 종목의 섹터 컨텍스트(현황 뉴스) 참고
     tickers = [s.get("ticker") for s in user_portfolio if "ticker" in s]
@@ -63,13 +64,15 @@ def portfolio_node(state: AgentState) -> Dict[str, Any]:
                     ### [고객 포트폴리오 데이터]
                     {enriched_portfolio_str}
 
-                    ### [거시경제 현황 및 섹터 뉴스]
-                    - 리서치 리포트: {macro_info}
+                    ### [시장 분석 및 리스크 리포트]
+                    - 거시경제 레포트: {macro_info}
+                    - 리스크 스캔 결과: {risk_info}
                     - 섹터 컨텍스트: {sector_info}
 
                     ---
                     **지시사항:**
-                    각 보유 종목이 현재의 거시 경제 환경에서 생존력이 있는지, 혹은 다른 섹터로의 교체가 필요한지 PB의 관점에서 진단하십시오.
+                    각 보유 종목이 현재의 거시 경제 환경 및 리스크 요인들 속에서 생존력이 있는지, 혹은 다른 섹터로의 교체가 필요한지 PB의 관점에서 진단하십시오.
+                    교체 시에는 반드시 **위의 리스크 스캔 결과에서 언급된 위험 섹터/종목은 후보에서 철저히 제외**하여 제안하십시오.
                     각 종목당 **3~4줄 내외**로 간결하게 기술하십시오.
                 """).strip(),
             ),
@@ -85,6 +88,7 @@ def portfolio_node(state: AgentState) -> Dict[str, Any]:
     input_data = {
         "enriched_portfolio_str": enriched_portfolio_str,
         "macro_info": macro_info,
+        "risk_info": risk_info,
         "sector_info": sector_info,
     }
 
