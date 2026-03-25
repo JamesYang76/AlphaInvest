@@ -5,6 +5,7 @@
 import os
 
 from langchain_openai import ChatOpenAI
+from tavily import TavilyClient
 
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
@@ -111,10 +112,9 @@ def fetch_news(query: str) -> str:
         return f"Tavily API 키가 설정되지 않았습니다. '{query}'에 대한 실시간 뉴스를 가져올 수 없습니다."
 
     try:
-        from tavily import TavilyClient
-
-        results = TavilyClient(api_key=tavily_api_key).search(query=query, max_results=5)
-        return "\n".join(f"- {r['title']}: {r['content'][:200]}" for r in results["results"])
+        results = TavilyClient(api_key=tavily_api_key).search(query=query, max_results=5, include_answer=True)
+        answer = results.get("answer")
+        return answer if answer else "\n".join(f"- {r['title']}: {r['content'][:200]}" for r in results["results"])
     except Exception as e:
         return f"Tavily 뉴스 검색 중 오류 발생: {str(e)}"
 
