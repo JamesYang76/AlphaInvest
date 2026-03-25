@@ -1,16 +1,33 @@
 import json
 import logging
+import os
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List
 
 from dotenv import load_dotenv
 
+# 프로젝트 루트를 기준으로 경로 고정 (IDE/터미널 어디서 실행해도 동일하게 동작)
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+os.chdir(PROJECT_ROOT)
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(PROJECT_ROOT))
+
 from agents.constants import StateKey
 from agents.state import get_initial_state
 from agents.workflow import build_skeleton
 from evaluations.metrics.qual import evaluate_with_llm_judge
-from evaluations.metrics.quant import calculate_extraction_score, evaluate_cio_report_structure
+from evaluations.metrics.quant import (
+    calculate_composite_score,
+    calculate_coverage_completeness_score,
+    calculate_extraction_score,
+    calculate_factual_grounding_score,
+    calculate_numeric_density_score,
+    calculate_section_depth_score,
+    calculate_ticker_mention_score,
+    evaluate_cio_report_structure,
+)
 
 
 def load_samples(path: str) -> List[Dict[str, Any]]:
@@ -39,17 +56,44 @@ def evaluate_results(run_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     CIO가 최종 생성한 'FINAL_REPORT'를 기반으로 정량/정성 평가를 수행합니다.
     """
-    return [
-        {
+    # 실시간 거시 데이터를 한 번만 호출 (모든 샘플에서 공유)
+    from data.fetchers import fetch_macro_data
+    macro_data = fetch_macro_data()
+
+    results = []
+    for data in run_data:
+        report = data["result"].get(StateKey.FINAL_REPORT, "")
+        portfolio = data["input"]
+
+        structure_check    = evaluate_cio_report_structure(report)
+        extraction_score   = calculate_extraction_score(report, data["expected_entities"])
+        section_depth      = calculate_section_depth_score(report)
+        ticker_score       = calculate_ticker_mention_score(report, portfolio)
+        numeric_density    = calculate_numeric_density_score(report)
+        coverage           = calculate_coverage_completeness_score(report)
+        factual_grounding  = calculate_factual_grounding_score(report, macro_data)
+        composite          = calculate_composite_score(
+            extraction_score, structure_check, section_depth,
+            ticker_score, numeric_density, coverage, factual_grounding,
+        )
+
+        results.append({
             "id": data["id"],
-            "final_report": data["result"].get(StateKey.FINAL_REPORT, ""),
-            "structure_check": evaluate_cio_report_structure(data["result"].get(StateKey.FINAL_REPORT, "")),
-            "quant_score": calculate_extraction_score(data["result"].get(StateKey.FINAL_REPORT, ""), data["expected_entities"]),
-            "qual_eval": evaluate_with_llm_judge(data["result"].get(StateKey.FINAL_REPORT, "")),
-            "timestamp": datetime.now().isoformat(),
-        }
-        for data in run_data
-    ]
+            "final_report": report,
+            # 세부 지표
+            "structure_check":       structure_check,
+            "extraction_score":      extraction_score,
+            "section_depth":         section_depth,
+            "ticker_mention_score":  ticker_score,
+            "numeric_density_score": numeric_density,
+            "coverage_score":        coverage,
+            "factual_grounding":     factual_grounding,
+            # 4대 카테고리 + 종합 점수
+            "scores": composite,
+            "qual_eval":             evaluate_with_llm_judge(report),
+            "timestamp":             datetime.now().isoformat(),
+        })
+    return results
 
 
 def save_report(eval_results: List[Dict[str, Any]], output_dir: str = "evaluations/results"):
