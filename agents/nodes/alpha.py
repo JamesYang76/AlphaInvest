@@ -121,7 +121,7 @@ def alpha_node(state: AgentState) -> Dict[str, Any]:
     macro_res = state.get(StateKey.MACRO_RESULT, "")
     risk_res = state.get(StateKey.RISK_RESULT, "")
     portfolio_res = state.get(StateKey.PORTFOLIO_RESULT, "")
-    score_context = f"{macro_res} {risk_res} {portfolio_res}"
+    score_context = f"{macro_res} {portfolio_res}"
 
     # 3. 테마 점수화 및 랭킹
     scored = []
@@ -143,19 +143,27 @@ def alpha_node(state: AgentState) -> Dict[str, Any]:
 
     # 4. 최종 리포트 작성
     logger.info("✍️ 알파 섹터 리포트 작성 중...")
+    
+    # 리스크 결과에서 '위험' 테마/종목을 강조하여 배제 유도
+    risk_summary = risk_res if risk_res else "특이사항 없음"
+
     report_prompt = dedent(f"""
-        당심은 AlphaInvest의 수석 애널리스트입니다.
+        당신은 AlphaInvest의 수석 애널리스트입니다.
         실시간 발굴된 테마 데이터를 바탕으로 [알파 섹터 추천] 파트를 작성하세요.
 
-        [발굴된 상위 섹터]
+        [발굴된 상위 섹터 후보]
         {json.dumps(selected, ensure_ascii=False, indent=2)}
 
-        [배경 데이터]
-        - 거시 경제: {macro_res}
-        - 리스크 관리: {risk_res}
+        [배경 데이터 및 강력 제약 사항]
+        - 거시 경제 상황: {macro_res}
 
-        지침:
-        1. 반드시 리스크 관리 섹션의 내용을 참고하여 리스크가 높은 섹터와 종목은 무조건 제외하세요.
+        [리스크 경고 내역]
+        {risk_summary}
+
+        지침 (필독):
+        1. **직전에 정의된 [리스크 경고 내역]을 최우선으로 검토하세요.** 
+           - 리스크 섹션에서 '기술적 과열', '내러티브 훼손', '위험' 등으로 분류된 섹션이 위 [발굴된 상위 섹터 후보]에 포함되어 있다면, 해당 섹션은 절대 추천하지 말고 차순위 섹터를 선택하세요.
+           - 리스크에서 특정 종목의 매수를 경고했다면, 그 종목은 추천 리스트에서 반드시 제외하십시오.
         2. 섹션 제목은 '## 3. 🚀 AI 인사이트: 주도 섹터 및 투자 테마'로 작성하세요.
         3. 발굴된 테마들의 투자 논거와 최신 시장 상황을 정교하게 엮으세요.
         4. 미국/한국 대표 종목을 명확히 명시하세요.

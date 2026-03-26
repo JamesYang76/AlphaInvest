@@ -17,7 +17,7 @@ if str(PROJECT_ROOT) not in sys.path:
 from agents.constants import StateKey
 from agents.state import get_initial_state
 from agents.workflow import build_skeleton
-from evaluations.metrics.qual import evaluate_with_llm_judge
+from evaluations.metrics.qual import evaluate_with_consensus_judge
 from evaluations.metrics.quant import (
     calculate_composite_score,
     calculate_coverage_completeness_score,
@@ -97,7 +97,7 @@ def evaluate_results(run_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
                 "factual_grounding": factual_grounding,
                 # 4대 카테고리 + 종합 점수
                 "scores": composite,
-                "qual_eval": evaluate_with_llm_judge(report),
+                "qual_eval": evaluate_with_consensus_judge(report),
                 "timestamp": datetime.now().isoformat(),
             }
         )
