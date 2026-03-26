@@ -3,6 +3,7 @@ from typing import Any, Dict, List
 import yfinance as yf
 
 
+# 시나리오: Portfolio 노드가 보유 종목별로 — yfinance에서 시세·PER·뉴스 요약 등을 한 종목 단위로 정규화해 진단 입력으로 쓴다.
 def get_stock_info(ticker: str, name: str = "") -> Dict[str, Any]:
     """
     Yahoo Finance(yfinance)를 단일 소스로 사용하여 실시간 데이터를 통합 포맷으로 반환합니다.
@@ -72,6 +73,7 @@ def get_stock_info(ticker: str, name: str = "") -> Dict[str, Any]:
         return {"ticker": ticker, "error": f"데이터 수집 중 오류: {str(e)}"}
 
 
+# 시나리오: Portfolio 노드 직전 — 사용자 포트폴리오 각 행에 실시간 시세·손익률을 붙여 LLM 프롬프트용 리스트를 완성한다.
 def enrich_portfolio_data(user_portfolio: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     사용자의 포트폴리오 정보를 바탕으로 실시간 시세 및 지표를 추가하고 수익률을 계산합니다.

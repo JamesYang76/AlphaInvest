@@ -16,6 +16,7 @@ logger = get_logger("agents.nodes.gp")
 load_dotenv()
 
 
+# 시나리오: Macro·Portfolio·Risk·Alpha 각각 끝난 직후 — current_report를 매크로 팩트와 대조해 통과/반려하고, 반려 시 해당 결과 키에 수정본을 쓴다.
 def gp_node(state: AgentState) -> Dict[str, Any]:
     """
     제출된 분석 리포트를 전문가의 관점에서 심사/검수하며,

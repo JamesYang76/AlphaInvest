@@ -22,6 +22,7 @@ class StateKey:
     CURRENT_REPORT: Final = "current_report"  # 💡 GP 심사용 공통 리포트 키
     FINAL_REPORT: Final = "final_report"
     NOTION_PAGE_URL: Final = "notion_page_url"  # 💡 Notion 발행 결과 URL
+    REPORT_SOURCE_LINKS: Final = "report_source_links"  # 💡 최종 리포트 하단 출처 링크 목록
 
     # 3. 메모리(Messages) 키
     MACRO_MESSAGES: Final = "macro_messages"
@@ -55,5 +56,5 @@ class ModelConfig:
     모든 에이전트가 공유하는 기본 언어 모델 및 온도 등 파라미터를 중앙에서 관리합니다.
     """
 
-    DEFAULT_LLM_MODEL: Final = "gpt-4o"
+    DEFAULT_LLM_MODEL: Final = "gpt-5.4-mini"
     DEFAULT_TEMPERATURE: Final = 0.0

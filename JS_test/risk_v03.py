@@ -1,4 +1,5 @@
 # 데이터 기반 위험 군집 + 동적 테마 하이브리드 리스크 아키텍처
+# JS_test 레거시 스냅샷 — 함수별 시나리오는 agents/nodes/risk.py 본선 주석을 참고.
 
 import json
 import os

@@ -30,11 +30,13 @@ from evaluations.metrics.quant import (
 )
 
 
+# 시나리오: `python evaluations/run_eval.py` 준비 단계 — 샘플 JSON(포트폴리오·기대 엔티티)을 메모리로 읽는다.
 def load_samples(path: str) -> List[Dict[str, Any]]:
     """평가용 골든 데이터셋을 로드합니다."""
     return json.loads(Path(path).read_text(encoding="utf-8"))
 
 
+# 시나리오: 평가 벤치 — 각 샘플 포트폴리오로 전체 그래프를 invoke해 최종 state를 수집한다.
 def run_benchmark(app: Any, samples: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     모든 샘플에 대해 파이프라인을 실행(Invoke)합니다.
@@ -52,6 +54,7 @@ def run_benchmark(app: Any, samples: List[Dict[str, Any]]) -> List[Dict[str, Any
     ]
 
 
+# 시나리오: 벤치 실행 후 — FINAL_REPORT에 대해 정량 지표+LLM Judge를 한 번에 계산해 결과 행을 만든다.
 def evaluate_results(run_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """
     CIO가 최종 생성한 'FINAL_REPORT'를 기반으로 정량/정성 평가를 수행합니다.
@@ -104,6 +107,7 @@ def evaluate_results(run_data: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     return results
 
 
+# 시나리오: 평가 종료 시 — 타임스탬프 JSON 파일로 결과를 남겨 회귀 비교에 쓴다.
 def save_report(eval_results: List[Dict[str, Any]], output_dir: str = "evaluations/results"):
     """평가 결과를 파일로 저장합니다."""
     output_path = Path(output_dir) / f"eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
@@ -112,6 +116,7 @@ def save_report(eval_results: List[Dict[str, Any]], output_dir: str = "evaluatio
     logging.info(f"✅ [CIO 최종 리포트 평가완료] 결과 저장: {output_path}")
 
 
+# 시나리오: 오프라인 품질 벤치 전체 오케스트레이션 — 샘플 로드→invoke→스코어→저장.
 def main():
     load_dotenv()
     logging.basicConfig(level=logging.INFO)

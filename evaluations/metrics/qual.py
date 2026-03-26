@@ -7,6 +7,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from data.fetchers import get_llm
 
 
+# 시나리오: LLM Judge가 마크다운을 섞어 보낼 때 — JSON 본문만 떼어 내고 실패 시 구조화된 폴백을 돌려준다.
 def _extract_json_from_response(content: str) -> Dict[str, Any]:
     """
     LLM 응답에서 JSON 부분만 최대한 안정적으로 추출합니다.
@@ -52,6 +53,7 @@ def _extract_json_from_response(content: str) -> Dict[str, Any]:
         }
 
 
+# 시나리오: 벤치마크·품질 검수 — CIO 최종 리포트를 스타일 가이드와 함께 LLM에 넣어 정성 평가 JSON을 받는다.
 def evaluate_with_llm_judge(report: str, style_guide_path: str = "STYLE_GUIDE.md") -> Dict[str, Any]:
     """
     CIO 최종 리포트에 대해 LLM-as-a-Judge 방식의 정성 평가를 수행합니다.
@@ -174,7 +176,6 @@ verdict 기준:
 - 안정적이고 보수적인 리포트는 오히려 긍정적으로 평가하세요
 - 일반적인 수준의 투자 조언도 논리와 일관성이 있으면 높은 점수를 줄 수 있습니다
             """.strip(),
-                """.strip(),
             ),
             (
                 "user",
@@ -185,7 +186,6 @@ verdict 기준:
 [평가 대상 리포트]
 {report}
             """.strip(),
-                """.strip(),
             ),
         ]
     )
@@ -231,6 +231,7 @@ verdict 기준:
     return parsed
 
 
+# 시나리오: Judge 변동성을 줄이기 — 동일 리포트에 대해 여러 번 심사해 다수결·분포 요약을 만든다.
 def evaluate_with_llm_judge_average(
     report: str,
     style_guide_path: str = "STYLE_GUIDE.md",
@@ -295,6 +296,7 @@ def evaluate_with_llm_judge_average(
     }
 
 
+# 시나리오: (예약) 추후 컨텍스트 대비 환각 점수 — 현재는 항상 1.0 플레이스홀더.
 def check_hallucination(report: str, context_data: Dict[str, Any]) -> float:
     """
     추후 확장용 함수.

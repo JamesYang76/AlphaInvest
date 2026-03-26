@@ -14,6 +14,7 @@ from utils.logger import get_logger
 logger = get_logger("agents.workflow")
 
 
+# 시나리오: 각 분석 노드 이후 GP가 끝날 때 LangGraph 라우터가 호출됨 — last_node에 따라 Macro→Portfolio→Risk→Alpha 순으로 전진하거나, Alpha 이후에는 CIO로 보낸다.
 def gp_router(state: AgentState) -> str:
     """
     GP가 수정을 마쳤으므로, 반려 없이 무조건 다음 단계로 진행합니다.
@@ -44,6 +45,7 @@ def gp_router(state: AgentState) -> str:
     return AgentName.CIO
 
 
+# 시나리오: main·평가 스크립트가 앱을 만들 때 한 번 호출 — Macro~Alpha↔GP 루프와 CIO→Publish→END까지의 StateGraph를 컴파일 가능한 형태로 조립한다.
 def build_skeleton() -> StateGraph:
     """
     ==========================================================

@@ -30,6 +30,7 @@ PORTFOLIO_SYSTEM_PROMPT = dedent("""
 """).strip()
 
 
+# 시나리오: Macro 이후 GP 통과 시 — 보유 종목을 시세 보강하고 거시·섹터 뉴스와 함께 PB 스타일 포트폴리오 진단문을 생성한다.
 def portfolio_node(state: AgentState) -> Dict[str, Any]:
     """
     유저의 포트폴리오를 진단하여 실시간 시황(Tavily, FRED 연동)에 맞는 전략을 생성하는 에이전트 노드입니다.

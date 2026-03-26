@@ -3,6 +3,7 @@
 """
 
 import os
+from typing import Any, Dict, List, Optional, Tuple
 
 from langchain_openai import ChatOpenAI
 
@@ -11,7 +12,8 @@ TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "")
 FRED_API_KEY = os.getenv("FRED_API_KEY", "")
 
 
-def get_llm(model: str = "gpt-4o", temperature: float = 0.7) -> ChatOpenAI:
+# 시나리오: 에이전트 노드·fetch 계층 어디서든 — OpenAI 채팅 모델 인스턴스를 공통 설정으로 꺼내 LLM 호출을 준비한다.
+def get_llm(model: str = "gpt-5.4-mini", temperature: float = 0.7) -> ChatOpenAI:
     """LLM 인스턴스 반환"""
     return ChatOpenAI(
         model=model,
@@ -20,6 +22,7 @@ def get_llm(model: str = "gpt-4o", temperature: float = 0.7) -> ChatOpenAI:
     )
 
 
+# 시나리오: Macro 노드(및 거시 지표가 필요한 단계) — FRED·yfinance로 금리·물가·VIX 등을 한 번에 모아 state.macro_data에 넣을 원시 딕셔너리를 만든다.
 def fetch_macro_data() -> dict:
     """거시경제 데이터 수집 (FRED & yfinance API 연동)"""
     fred_api_key = os.getenv("FRED_API_KEY", "")
@@ -84,6 +87,7 @@ def fetch_macro_data() -> dict:
         return {"error": str(e), "source": "None"}
 
 
+# 시나리오: 종목 리스트가 주어졌을 때(레거시·보조) — yfinance로 PER·시총 등 기본 펀더멘털 묶음을 가져온다.
 def fetch_stock_data(tickers: list) -> dict:
     """주식 시세 및 재무 데이터 수집 (yfinance)"""
     import yfinance as yf
@@ -104,30 +108,100 @@ def fetch_stock_data(tickers: list) -> dict:
     return result
 
 
-def fetch_news(query: str) -> str:
-    """실시간 뉴스 검색 (Tavily API 연동)"""
+# 시나리오: Macro·Alpha 등 — Tavily 검색으로 본문 스니펫과 함께 URL 목록을 받아 리포트 하단 출처에 누적한다.
+def fetch_news_with_sources(
+    query: str,
+    max_results: int = 5,
+    link_prefix: str = "[Tavily]",
+) -> Tuple[str, List[Dict[str, str]]]:
+    """실시간 뉴스 검색 (Tavily). (LLM용 텍스트, 출처 링크 리스트) 반환."""
     tavily_api_key = os.getenv("TAVILY_API_KEY", "")
     if not tavily_api_key:
-        return f"Tavily API 키가 설정되지 않았습니다. '{query}'에 대한 실시간 뉴스를 가져올 수 없습니다."
+        msg = f"Tavily API 키가 설정되지 않았습니다. '{query}'에 대한 실시간 뉴스를 가져올 수 없습니다."
+        return msg, []
 
     try:
         from tavily import TavilyClient
 
-        results = TavilyClient(api_key=tavily_api_key).search(query=query, max_results=5)
-        return "\n".join(f"- {r['title']}: {r['content'][:200]}" for r in results["results"])
+        results = TavilyClient(api_key=tavily_api_key).search(query=query, max_results=max_results)
+        rows = results.get("results", [])
+        text = "\n".join(f"- {r['title']}: {r['content'][:200]}" for r in rows)
+        links: List[Dict[str, str]] = []
+        for r in rows:
+            url = (r.get("url") or "").strip()
+            if not url:
+                continue
+            title = (r.get("title") or "기사").strip()
+            label = f"{link_prefix} {title}"[:200]
+            links.append({"label": label, "url": url})
+        return text, links
     except Exception as e:
-        return f"Tavily 뉴스 검색 중 오류 발생: {str(e)}"
+        return f"Tavily 뉴스 검색 중 오류 발생: {str(e)}", []
+
+
+# 시나리오: Macro·Alpha 등에서 시황 보강이 필요할 때 — Tavily로 쿼리별 실시간 뉴스 스니펫 문자열을 받아 프롬프트에 넣는다.
+def fetch_news(query: str) -> str:
+    """실시간 뉴스 검색 (Tavily API 연동) — 텍스트만 필요할 때."""
+    text, _ = fetch_news_with_sources(query)
+    return text
+
+
+def merge_report_source_links(
+    existing: Optional[List[Dict[str, str]]],
+    new_items: List[Dict[str, str]],
+) -> List[Dict[str, str]]:
+    """URL 기준 중복 제거하며 출처 링크 리스트를 병합한다."""
+    seen: set[str] = set()
+    out: List[Dict[str, str]] = []
+    for item in (existing or []) + new_items:
+        u = (item.get("url") or "").strip()
+        if not u or u in seen:
+            continue
+        seen.add(u)
+        label = (item.get("label") or u).strip()
+        out.append({"label": label, "url": u})
+    return out
+
+
+def macro_numeric_source_links() -> List[Dict[str, str]]:
+    """fetch_macro_data()에서 쓰는 FRED 시리즈·시장 심볼에 대응하는 참고 URL (정적)."""
+    return [
+        {"label": "FRED — St. Louis Fed (경제 데이터 포털)", "url": "https://fred.stlouisfed.org/"},
+        {"label": "FRED — Effective Federal Funds Rate (DFF)", "url": "https://fred.stlouisfed.org/series/DFF"},
+        {"label": "FRED — Consumer Price Index (CPIAUCSL)", "url": "https://fred.stlouisfed.org/series/CPIAUCSL"},
+        {"label": "FRED — Unemployment Rate (UNRATE)", "url": "https://fred.stlouisfed.org/series/UNRATE"},
+        {"label": "FRED — Market Yield on U.S. Treasury 10Y (DGS10)", "url": "https://fred.stlouisfed.org/series/DGS10"},
+        {"label": "FRED — ICE BofA US High Yield Option-Adjusted Spread", "url": "https://fred.stlouisfed.org/series/BAMLH0A0HYM2"},
+        {"label": "Yahoo Finance — VIX", "url": "https://finance.yahoo.com/quote/%5EVIX/"},
+        {"label": "Yahoo Finance — S&P 500", "url": "https://finance.yahoo.com/quote/%5EGSPC/"},
+        {"label": "Yahoo Finance — US Dollar Index", "url": "https://finance.yahoo.com/quote/DX-Y.NYB/"},
+    ]
+
+
+def format_report_sources_markdown(links: List[Dict[str, Any]]) -> str:
+    """최종 리포트 말미에 붙일 마크다운 출처 블록."""
+    if not links:
+        return ""
+    lines = ["", "## 참고 및 출처", ""]
+    for i, item in enumerate(links, 1):
+        label = str(item.get("label") or "링크").strip()
+        url = str(item.get("url") or "").strip()
+        if url:
+            lines.append(f"{i}. [{label}]({url})")
+    return "\n".join(lines) + "\n"
 
 
 # ─── 기술적 지표 및 상세 시장 신호 (Risk 노드 등에서 사용) ───
 
 
+# 시나리오: 여러 티커의 단기 수익률·RSI 등이 필요할 때(data.fetchers 경로) — 스레드 풀로 병렬 시세·지표를 수집한다.
 def fetch_market_signals(tickers: list) -> dict:
     """여러 티커에 대한 시장 신호(수익률, RSI, 이격도 등)를 병렬로 수집"""
     from concurrent.futures import ThreadPoolExecutor, as_completed
 
     import yfinance as yf
 
+    # 시나리오: fetch_market_signals 병렬 워커 — 단일 티커에 대해 3개월 히스토리로 RSI·낙폭 등을 계산한다.
     def _fetch_one(ticker):
         base = {"ticker": ticker}
         try:

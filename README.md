@@ -19,7 +19,7 @@
   - News/Search: `Tavily Search API`
 - **AI/LLM 아키텍처**:
   - `LangGraph` (워크플로우 제어)
-  - `OpenAI API (GPT-4o)` (MVP 단계)
+  - `OpenAI API (GPT-5.4-mini)` (MVP 단계)
 - **배포 및 리포트**:
   - `Notion API` 연동
 

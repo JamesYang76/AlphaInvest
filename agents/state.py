@@ -38,7 +38,11 @@ class AgentState(TypedDict):
     # 6. Notion 발행 결과
     notion_page_url: str
 
+    # 7. 리포트 하단 출처 (label + url 딕셔너리 리스트, 노드별 누적·중복 URL 제거)
+    report_source_links: List[Dict[str, str]]
 
+
+# 시나리오: 파이프라인 시작 직전(main·벤치마크) — user_portfolio만 채운 빈 AgentState를 만들어 이후 노드가 macro_result 등을 덧쌓을 수 있게 한다.
 def get_initial_state(user_portfolio: List[Dict[str, Any]]) -> AgentState:
     """
     실행 진입점(main)에서 생성하는 최초의 텅 빈 상태입니다.
@@ -58,4 +62,5 @@ def get_initial_state(user_portfolio: List[Dict[str, Any]]) -> AgentState:
         StateKey.CURRENT_REPORT: "",
         StateKey.FINAL_REPORT: "",
         StateKey.NOTION_PAGE_URL: "",
+        StateKey.REPORT_SOURCE_LINKS: [],
     }

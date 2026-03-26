@@ -9,6 +9,7 @@ from agents.state import AgentState, get_initial_state
 from data.mock_data import get_portfolio
 
 
+# 시나리오: risk_node 단독 CLI 테스트 — mock 포트폴리오와 macro_result(및 선택 GP 피드백)를 넣은 state를 만든다.
 def _build_state(macro_result: str, feedback_reason: str) -> AgentState:
     state = get_initial_state(user_portfolio=get_portfolio())
     state[StateKey.MACRO_RESULT] = macro_result
@@ -20,6 +21,7 @@ def _build_state(macro_result: str, feedback_reason: str) -> AgentState:
     return state
 
 
+# 시나리오: 테스트 스크립트 출력 — 사람이 읽기 쉬운 텍스트 또는 원시 JSON을 선택해 찍는다.
 def _print_result(result: Dict[str, Any], as_json: bool) -> None:
     if as_json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -28,6 +30,7 @@ def _print_result(result: Dict[str, Any], as_json: bool) -> None:
     print(result.get(StateKey.RISK_RESULT, ""))
 
 
+# 시나리오: `--macro-source live`일 때 — 실제 macro_node를 한 번 돌린 요약을 쓰고, 실패 시 인자 fallback을 쓴다.
 def _resolve_macro_result(macro_source: str, fallback_macro_result: str) -> str:
     if macro_source == "static":
         return fallback_macro_result
@@ -38,6 +41,7 @@ def _resolve_macro_result(macro_source: str, fallback_macro_result: str) -> str:
     return live_macro or fallback_macro_result
 
 
+# 시나리오: 개발자가 Risk만 빠르게 검증할 때 — `python tests/test_risk_node.py`로 risk_node를 고립 실행한다.
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run risk_node in isolation for quick manual testing.",

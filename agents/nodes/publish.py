@@ -11,6 +11,7 @@ from utils.notion_publisher import publish_to_notion
 logger = get_logger("agents.nodes.publish")
 
 
+# 시나리오: CIO 직후 그래프의 마지막 변환 단계 — final_report를 마크다운→Notion 블록으로 올리고 notion_page_url을 state에 남긴다.
 def publish_node(state: AgentState) -> Dict[str, Any]:
     """CIO가 완성한 final_report를 Notion 데이터베이스에 신규 페이지로 발행합니다."""
     final_report = state.get(StateKey.FINAL_REPORT, "")

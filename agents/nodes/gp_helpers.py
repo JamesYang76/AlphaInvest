@@ -46,6 +46,7 @@ REPAIR_SYSTEM_PROMPT = dedent("""
 """).strip()
 
 
+# 시나리오: GP가 반려 후 수정본을 state에 쓸 때 — last_node에 따라 macro_result/risk_result 등 올바른 StateKey를 고른다.
 def get_target_key(last_node: str) -> str:
     """에이전트 이름에 따른 결과 저장 키값을 반환합니다."""
     mapping = {
@@ -57,6 +58,7 @@ def get_target_key(last_node: str) -> str:
     return mapping.get(last_node, StateKey.CURRENT_REPORT)
 
 
+# 시나리오: GP 심사에서 반려됐을 때 — 피드백만 반영한 최종 리포트 본문을 LLM으로 재작성한다.
 def run_repair_chain(llm, target_result, reason):
     """지시받은 피드백에 따라 보고서를 직접 교정하여 반환합니다."""
     prompt = ChatPromptTemplate.from_messages(

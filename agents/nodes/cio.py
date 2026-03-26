@@ -6,12 +6,13 @@ from langchain_core.messages import HumanMessage
 
 from agents.constants import StateKey
 from agents.state import AgentState
-from data.fetchers import get_llm
+from data.fetchers import format_report_sources_markdown, get_llm
 from utils.logger import get_logger
 
 logger = get_logger("agents.nodes.cio")
 
 
+# 시나리오: Alpha까지 통과한 뒤 GP·라우터가 CIO로 보낼 때 — 네 에이전트 결과를 한 리포트로 합치고 LLM으로 문체를 다듬어 final_report를 만든다.
 def cio_node(state: AgentState) -> Dict[str, Any]:
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     macro = state.get(StateKey.MACRO_RESULT, "데이터 없음")
@@ -73,6 +74,10 @@ def cio_node(state: AgentState) -> Dict[str, Any]:
     except Exception as e:
         logger.error(f"[CIO] 오류 발생: {e}")
         final_polished_report = report
+
+    sources_md = format_report_sources_markdown(state.get(StateKey.REPORT_SOURCE_LINKS, []))
+    if sources_md:
+        final_polished_report = final_polished_report.rstrip() + sources_md
 
     return {StateKey.FINAL_REPORT: final_polished_report}
 
