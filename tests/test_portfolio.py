@@ -6,6 +6,7 @@ from agents.state import get_initial_state
 from data.mock_data import get_portfolio
 
 
+# 시나리오: Portfolio 노드만 수동 스모크 — mock state로 portfolio_node를 호출해 진단문을 콘솔에 본다.
 def test_portfolio_agent():
     load_dotenv()  # .env 로드
     print("🚀 [TEST] 포트폴리오 에이전트 단독 실행 테스트를 시작합니다...\n")

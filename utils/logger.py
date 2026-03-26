@@ -3,6 +3,7 @@ import os  # 추가
 import sys
 
 
+# 시나리오: 모든 모듈이 동일한 콘솔 로깅 포맷을 쓰도록 — LOG_LEVEL 환경변수를 반영한 이름 붙은 Logger를 돌려준다.
 def get_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
 

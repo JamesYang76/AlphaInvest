@@ -5,6 +5,7 @@ from fredapi import Fred
 from tavily import TavilyClient
 
 
+# 시나리오: 거시 맥락 문자열이 별도 유틸 경로로 필요할 때 — Tavily+FRED를 섞어 짧은 시황 블록을 만든다(일부 노드·실험용).
 def get_macro_context() -> str:
     """
     Tavily Search와 FRED 지표를 결합하여 현재의 거시 경제(Macro) 컨텍스트를 생성합니다.
@@ -43,6 +44,7 @@ def get_macro_context() -> str:
     return macro_context.strip() if macro_context else "현재 수집된 시황 정보가 없습니다."
 
 
+# 시나리오: Portfolio 노드가 보유 티커 기반 섹터 뉴스를 붙일 때 — Tavily로 주도 섹터·관련 산업 전망 문단을 가져온다.
 def get_sector_context(tickers: List[str] = None) -> str:
     """
     Tavily Search를 이용하여 현재 주도 섹터(Alpha) 및 내 종목 관련 섹터 정보를 수집합니다.

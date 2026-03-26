@@ -31,6 +31,7 @@ _DIVIDER_PATTERN = re.compile(r"^-{3,}$|^\*{3,}$")
 # ============================================================
 # 1. Notion Rich-Text 변환
 # ============================================================
+# 시나리오: 마크다운 한 조각을 Notion API 블록으로 보낼 때 — 단일 rich_text JSON 조각(볼드/이탤릭)을 만든다.
 def _rich_text_obj(content: str, bold: bool = False, italic: bool = False) -> Dict[str, Any]:
     """단일 Notion rich_text 오브젝트를 생성합니다."""
     rt: Dict[str, Any] = {
@@ -42,6 +43,7 @@ def _rich_text_obj(content: str, bold: bool = False, italic: bool = False) -> Di
     return rt
 
 
+# 시나리오: Notion 2000자 제한을 넘는 본문 — 안전하게 잘라 여러 rich_text로 나눌 때 쓴다.
 def _chunk_text(content: str, chunk_size: int = _RICH_TEXT_LIMIT) -> List[str]:
     """Notion rich_text 길이 제한(2000자)에 맞춰 안전하게 분할합니다."""
     if not content:
@@ -49,11 +51,13 @@ def _chunk_text(content: str, chunk_size: int = _RICH_TEXT_LIMIT) -> List[str]:
     return [content[i : i + chunk_size] for i in range(0, len(content), chunk_size)]
 
 
+# 시나리오: 문단 전체를 Notion에 넣기 직전 — 청크 단위 rich_text 배열로 만든다.
 def _rich_text_objects(content: str, bold: bool = False, italic: bool = False) -> List[Dict[str, Any]]:
     """문자열을 Notion rich_text 배열(길이 제한 분할 포함)로 변환합니다."""
     return [_rich_text_obj(chunk, bold=bold, italic=italic) for chunk in _chunk_text(content)]
 
 
+# 시나리오: CIO 리포트 한 줄에 **굵게**·*기울임*이 섞일 때 — 인라인 마크다운을 rich_text 세그먼트로 쪼갠다.
 def _parse_inline_markdown(text: str) -> List[Dict[str, Any]]:
     """인라인 마크다운(**bold**, *italic*)을 Notion rich_text 배열로 변환합니다."""
     segments: List[Dict[str, Any]] = []
@@ -70,11 +74,13 @@ def _parse_inline_markdown(text: str) -> List[Dict[str, Any]]:
 # ============================================================
 # 2. Markdown → Notion Block 변환
 # ============================================================
+# 시나리오: 변환 파이프라인에서 — paragraph/heading 등 타입과 rich_text를 묶어 Notion block 객체 하나를 만든다.
 def _make_block(block_type: str, rich_text: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Notion block 오브젝트를 생성합니다."""
     return {"object": "block", "type": block_type, block_type: {"rich_text": rich_text}}
 
 
+# 시나리오: 마크다운을 줄 단위로 훑을 때 — 빈 줄·구분선·제목·리스트·본문 여부를 판별한다.
 def _classify_line(line: str) -> Tuple[str, str]:
     """마크다운 한 줄을 (block_type, content) 튜플로 분류합니다."""
     stripped = line.strip()
@@ -98,11 +104,13 @@ def _classify_line(line: str) -> Tuple[str, str]:
     return ("paragraph", stripped)
 
 
+# 시나리오: Publish 노드·CLI가 final_report 전체를 Notion에 넣을 때 — 마크다운 문자열을 API children 블록 배열로 바꾼다.
 def markdown_to_notion_blocks(markdown_text: str) -> List[Dict[str, Any]]:
     """마크다운 전문을 Notion Block 오브젝트 리스트로 변환합니다."""
     blocks: List[Dict[str, Any]] = []
     paragraph_buffer: List[str] = []
 
+    # 시나리오: markdown_to_notion_blocks 내부 — 연속된 본문 줄을 모아 하나의 paragraph 블록으로 밀어 넣는다.
     def flush_paragraph() -> None:
         if not paragraph_buffer:
             return
@@ -132,6 +140,7 @@ def markdown_to_notion_blocks(markdown_text: str) -> List[Dict[str, Any]]:
 # ============================================================
 # 3. Notion 페이지 생성 API_check
 # ============================================================
+# 시나리오: DB 스키마가 버전마다 다를 때 — 페이지 생성 시 채워야 할 title 프로퍼티 이름을 자동으로 찾는다.
 def _detect_title_property(client: Client, database_id: str) -> str:
     """데이터베이스/데이터소스 스키마에서 title 타입 프로퍼티 이름을 자동 탐지합니다."""
     db = client.databases.retrieve(database_id=database_id)
@@ -150,6 +159,7 @@ def _detect_title_property(client: Client, database_id: str) -> str:
     return "Name"
 
 
+# 시나리오: DB에 날짜 컬럼이 있을 때 — 오늘 날짜를 넣을 date 타입 프로퍼티 이름을 찾는다.
 def _detect_date_property(client: Client, database_id: str) -> str:
     """데이터베이스/데이터소스 스키마에서 date 타입 프로퍼티 이름을 자동 탐지합니다."""
     db = client.databases.retrieve(database_id=database_id)
@@ -167,6 +177,7 @@ def _detect_date_property(client: Client, database_id: str) -> str:
     return ""
 
 
+# 시나리오: pages.create 직전 — 제목·(선택)날짜 속성 dict를 조립한다.
 def _build_page_properties(client: Client, database_id: str, title: str) -> Dict[str, Any]:
     """페이지 생성 시 사용할 속성(title/date)을 구성합니다."""
     title_prop = _detect_title_property(client, database_id)
@@ -187,12 +198,14 @@ def _build_page_properties(client: Client, database_id: str, title: str) -> Dict
     return properties
 
 
+# 시나리오: 리포트가 길어 블록이 100개를 넘을 때 — 첫 배치 이후 나머지를 페이지에 이어 붙인다.
 def _append_remaining_blocks(client: Client, page_id: str, blocks: List[Dict[str, Any]]) -> None:
     """100개 초과 블록을 배치 단위로 추가 적재합니다."""
     for i in range(0, len(blocks), _BLOCKS_PER_REQUEST):
         client.blocks.children.append(block_id=page_id, children=blocks[i : i + _BLOCKS_PER_REQUEST])
 
 
+# 시나리오: CIO 이후 Publish 노드·CLI — DB에 새 페이지를 만들고 발행된 Notion URL을 반환한다.
 def publish_to_notion(title: str, markdown_text: str) -> str:
     """Notion 데이터베이스에 새 페이지를 생성하고 URL을 반환합니다."""
     api_key = os.getenv("NOTION_API_KEY", "")
@@ -219,6 +232,7 @@ def publish_to_notion(title: str, markdown_text: str) -> str:
     return page_url
 
 
+# 시나리오: 테스트·스모크에서 risk_node 출력 JSON을 — Notion에 넣기 좋은 짧은 마크다운으로 포장할 때 쓴다.
 def _risk_test_json_to_markdown(payload: Dict[str, Any]) -> str:
     """tests/test_risk_node.py 출력(JSON)을 Notion용 Markdown으로 포장합니다."""
     lines: List[str] = []
@@ -240,6 +254,7 @@ def _risk_test_json_to_markdown(payload: Dict[str, Any]) -> str:
     return "\n".join(lines).strip()
 
 
+# 시나리오: CLI·외부 도구가 JSON 덤프를 넘길 때 — 파싱 후 publish_to_notion까지 연결한다.
 def publish_json_to_notion(title: str, json_payload: Union[str, Dict[str, Any]]) -> str:
     """JSON(텍스트 또는 dict)을 받아 Notion에 페이지로 발행합니다."""
     try:
@@ -260,6 +275,7 @@ def publish_json_to_notion(title: str, json_payload: Union[str, Dict[str, Any]])
     return publish_to_notion(title=title, markdown_text=markdown_text)
 
 
+# 시나리오: notion_publisher CLI에서 파이프 입력 — 표준입력 전체를 한 문자열로 읽는다.
 def _read_text_from_stdin() -> str:
     chunks = []
     while True:
@@ -270,6 +286,7 @@ def _read_text_from_stdin() -> str:
     return "".join(chunks).strip()
 
 
+# 시나리오: `python -m utils.notion_publisher` — 마크다운/JSON/스모크-risk 등 CLI 진입점으로 Notion 발행을 수동 실행한다.
 def main() -> None:
     # CLI 실행 시에도 .env를 읽어서 NOTION_* 환경변수를 채웁니다.
     try:

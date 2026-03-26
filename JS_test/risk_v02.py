@@ -1,3 +1,5 @@
+"""JS_test 레거시 실험 스냅샷 — 함수별 시나리오는 agents/nodes/risk.py 본선과 대응한다."""
+
 import json
 import os
 import re

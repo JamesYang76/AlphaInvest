@@ -15,6 +15,7 @@ from langchain_openai import ChatOpenAI
 
 from agents.constants import AgentName, ModelConfig, StateKey
 from agents.state import AgentState
+from data.fetchers import merge_report_source_links
 
 try:
     from dotenv import load_dotenv
@@ -176,12 +177,14 @@ T = TypeVar("T")
 # ═══════════════════════════════════════════════════════════════
 # HTTP 유틸리티
 # ═══════════════════════════════════════════════════════════════
+# 시나리오: Risk 노드가 FRED·Yahoo API를 부를 때 — GET JSON 응답을 파싱한다.
 def _http_get_json(url: str, headers: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
     req = Request(url=url, headers=headers or {}, method="GET")
     with urlopen(req, timeout=10) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
 
+# 시나리오: Tavily 등 POST 바디가 필요한 외부 API — JSON 페이로드를 보내고 응답을 dict로 받는다.
 def _http_post_json(
     url: str,
     payload: Dict[str, Any],
@@ -198,6 +201,7 @@ def _http_post_json(
         return json.loads(resp.read().decode("utf-8"))
 
 
+# 시나리오: FRED observation 문자열을 숫자로 바꿀 때 — 실패 시 None으로 두어 후속 로직이 스킵하게 한다.
 def _safe_float(value: str) -> Optional[float]:
     try:
         return float(value)
@@ -208,6 +212,7 @@ def _safe_float(value: str) -> Optional[float]:
 # ═══════════════════════════════════════════════════════════════
 # 병렬 처리 유틸리티
 # ═══════════════════════════════════════════════════════════════
+# 시나리오: Risk 파이프라인에서 티커/시리즈 딕셔너리를 병렬로 돌릴 때 — utils.helpers.parallel_map_dict와 동일 역할.
 def _parallel_map_dict(
     items: Dict[str, T],
     worker: Callable[[T], Any],
@@ -218,6 +223,7 @@ def _parallel_map_dict(
         return {fmap[f]: f.result() for f in as_completed(fmap)}
 
 
+# 시나리오: 테마별 내러티브 검사 등 순서 보존 병렬 — 리스트 인덱스에 맞춰 결과를 채운다.
 def _parallel_map_list(
     items: List[T],
     worker: Callable[[T], Any],
@@ -237,6 +243,7 @@ def _parallel_map_list(
 
 
 # FRED 단일 시계열 최근 관측치(최대 4개) 조회
+# 시나리오: Risk가 금리·스프레드 최신값을 쓸 때 — FRED REST로 시리즈별 최근 관측값 리스트를 가져온다.
 def _fetch_fred_series(series_id: str, api_key: str) -> List[float]:
     q = urlencode(
         {
@@ -254,6 +261,7 @@ def _fetch_fred_series(series_id: str, api_key: str) -> List[float]:
 
 
 # FRED 금리/스프레드 지표를 요약 문자열 + 원시 값 dict로 반환
+# 시나리오: risk_node 시작 시 — state의 macro_result와 합쳐질 FRED 요약·values를 만든다(매크로 노드와 정합).
 def _build_macro_context() -> Dict[str, Any]:
     api_key = os.getenv("FRED_API_KEY", "").strip()
     if not api_key:
@@ -278,6 +286,7 @@ def _build_macro_context() -> Dict[str, Any]:
 
 
 # Tavily 뉴스 원문(title + content) 수집
+# 시나리오: 섹터 리스크·엔티티 추출 전 — 쿼리별 뉴스 스니펫 리스트를 모은다.
 def _fetch_news_articles(query: str, max_results: int = 15) -> List[Dict[str, str]]:
     api_key = os.getenv("TAVILY_API_KEY", "").strip()
     if not api_key:
@@ -299,13 +308,27 @@ def _fetch_news_articles(query: str, max_results: int = 15) -> List[Dict[str, st
         {
             "title": it.get("title", ""),
             "content": it.get("content", "")[:300],
+            "url": (it.get("url") or "").strip(),
         }
         for it in resp.get("results", [])
         if it.get("title")
     ]
 
 
+def _article_source_links(items: List[Dict[str, str]], prefix: str) -> List[Dict[str, str]]:
+    """Tavily 기사 목록에서 출처 링크 리스트 생성."""
+    out: List[Dict[str, str]] = []
+    for it in items:
+        u = (it.get("url") or "").strip()
+        if not u:
+            continue
+        t = (it.get("title") or "기사").strip()[:120]
+        out.append({"label": f"{prefix} {t}", "url": u})
+    return out
+
+
 # ─── 기술적 지표 헬퍼 (RSI, 이동평균 이격도) ────────────────
+# 시나리오: yfinance 히스토리가 있을 때 — pandas 종가로 RSI를 계산해 과열 판단에 쓴다.
 def _compute_rsi(closes: Any, period: int = 14) -> Optional[float]:
     """pandas Series 기반 RSI 계산."""
     if len(closes) < period + 1:
@@ -320,6 +343,7 @@ def _compute_rsi(closes: Any, period: int = 14) -> Optional[float]:
     return round(100 - (100 / (1 + rs)), 1)
 
 
+# 시나리오: 단기 추세 이격 — 종가 vs 이동평균 괴리율(%)을 구한다.
 def _compute_ma_divergence(closes: Any, period: int = 5) -> Optional[float]:
     """pandas Series 기반 이동평균 이격도(%) 계산."""
     if len(closes) < period:
@@ -330,6 +354,7 @@ def _compute_ma_divergence(closes: Any, period: int = 5) -> Optional[float]:
     return round((closes.iloc[-1] / ma - 1) * 100, 1)
 
 
+# 시나리오: Yahoo 차트 API 폴백 경로 — 가격 배열만 있을 때 RSI를 계산한다.
 def _compute_rsi_from_list(prices: List[float], period: int = 14) -> Optional[float]:
     """순수 리스트 기반 RSI 계산 (API 폴백용)."""
     if len(prices) < period + 1:
@@ -344,6 +369,7 @@ def _compute_rsi_from_list(prices: List[float], period: int = 14) -> Optional[fl
     return round(100 - (100 / (1 + rs)), 1)
 
 
+# 시나리오: Yahoo 차트 API 폴백 — 리스트 가격으로 MA 이격도를 계산한다.
 def _compute_ma_divergence_from_list(
     prices: List[float],
     period: int = 5,
@@ -358,6 +384,7 @@ def _compute_ma_divergence_from_list(
 
 
 # 단일 티커의 시장 신호(수익률, 변동성, RSI, MA 이격도) 조회
+# 시나리오: 군집·테마의 대표 종목마다 — 3개월 시세로 수익률·RSI·낙폭 등을 한 묶음으로 수집한다.
 def _fetch_market_signal(ticker: str) -> Dict[str, Any]:
     base: Dict[str, Any] = {"ticker": ticker}
 
@@ -389,6 +416,7 @@ def _fetch_market_signal(ticker: str) -> Dict[str, Any]:
 
 
 # yfinance 미설치 시 Yahoo 차트 API 폴백
+# 시나리오: 의존성 제한 환경 — HTTP 차트 API로만 동일한 지표를 근사한다.
 def _fetch_market_signal_api(ticker: str) -> Dict[str, Any]:
     base: Dict[str, Any] = {"ticker": ticker}
     q = urlencode({"range": "3mo", "interval": "1d"})
@@ -434,6 +462,7 @@ def _fetch_market_signal_api(ticker: str) -> Dict[str, Any]:
 
 
 # LLM 응답에서 JSON 배열을 안전하게 파싱
+# 시나리오: 엔티티·테마 추출 LLM 출력 — 코드펜스를 제거하고 JSON 배열을 복구한다.
 def _parse_llm_json(text: str) -> List[Dict[str, Any]]:
     cleaned = re.sub(r"```(?:json)?\s*", "", text).strip().rstrip("`")
     try:
@@ -450,6 +479,7 @@ def _parse_llm_json(text: str) -> List[Dict[str, Any]]:
 
 
 # 뉴스 기사 배치를 LLM에 보내 RiskEvent 구조로 추출
+# 시나리오: Risk Step2 — 뉴스 묶음에서 티커·산업·감성 등 구조화된 위험 이벤트를 뽑는다.
 def _extract_risk_entities(articles: List[Dict[str, str]], llm: Any) -> List[Dict[str, Any]]:
     if not articles:
         return []
@@ -479,6 +509,7 @@ def _extract_risk_entities(articles: List[Dict[str, str]], llm: Any) -> List[Dic
 # ═══════════════════════════════════════════════════════════════
 # Step 3: 추출된 티커에 시장 신호 부착
 # ═══════════════════════════════════════════════════════════════
+# 시나리오: 엔티티에 나온 티커 집합에 — 병렬로 시세 신호를 붙여 군집 스코어링에 넘긴다.
 def _attach_market_signals(
     entities: List[Dict[str, Any]],
 ) -> Dict[str, Dict[str, Any]]:
@@ -497,6 +528,7 @@ def _attach_market_signals(
 # ═══════════════════════════════════════════════════════════════
 # Step 4: 키워드 기반 군집화 (Union-Find)
 # ═══════════════════════════════════════════════════════════════
+# 시나리오: 개별 뉴스 엔티티를 — 티커·산업 키워드로 묶어 상위 위험 군집 후보를 만든다.
 def _cluster_entities(
     entities: List[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
@@ -562,6 +594,7 @@ def _cluster_entities(
 
 
 # 군집 키워드 → 거시 민감도 카테고리 매핑
+# 시나리오: 군집 스코어 산출 시 — 금리·크레딧·사이클 민감도 태그를 붙인다.
 def _map_macro_exposure(keywords: List[str]) -> List[str]:
     joined = " ".join(k.lower() for k in keywords)
     exposures = [cat for cat, terms in MACRO_SENSITIVITY.items() if any(t in joined for t in terms)]
@@ -569,6 +602,7 @@ def _map_macro_exposure(keywords: List[str]) -> List[str]:
 
 
 # 군집별 복합 위험 점수(0~100) = 매크로 35% + 시장 35% + 뉴스 30%
+# 시나리오: 상위 경보 후보 선정 — 뉴스 감성·주가·FRED 값을 섞어 군집별 단일 점수를 낸다.
 def _score_cluster(
     cluster: Dict[str, Any],
     market_signals: Dict[str, Dict[str, Any]],
@@ -603,6 +637,7 @@ def _score_cluster(
 # ═══════════════════════════════════════════════════════════════
 # Step 6: 상위 군집을 LLM 입력용 evidence 블록으로 포맷
 # ═══════════════════════════════════════════════════════════════
+# 시나리오: 최종 리스크 LLM 프롬프트 — 상위 군집·티커별 시그널·매크로 요약을 한 텍스트 블록으로 이어 붙인다.
 def _format_clusters_evidence(
     clusters: List[Dict[str, Any]],
     market_signals: Dict[str, Dict[str, Any]],
@@ -645,6 +680,7 @@ def _format_clusters_evidence(
 # ═══════════════════════════════════════════════════════════════
 
 
+# 시나리오: 테마 기반 하방 리스크 분석 전 — 상승 테마·약세 섹터 뉴스를 두 쿼리로 나눠 모은다.
 def _fetch_theme_news() -> List[Dict[str, str]]:
     """Tavily에서 상승 테마 + 섹터 약점 뉴스를 병렬 수집한다."""
     queries = [
@@ -662,6 +698,7 @@ def _fetch_theme_news() -> List[Dict[str, str]]:
     return combined
 
 
+# 시나리오: 테마 뉴스 묶음을 — LLM으로 구조적 투자 테마(JSON) 목록으로 바꾼다.
 def _extract_themes(
     articles: List[Dict[str, str]],
     llm: Any,
@@ -694,6 +731,7 @@ def _extract_themes(
         return []
 
 
+# 시나리오: 추출된 테마의 리더·ETF 티커에 — 시장 신호를 병렬로 붙여 과열·역행 판단의 입력으로 쓴다.
 def _enrich_theme_signals(
     themes: List[Dict[str, Any]],
 ) -> Dict[str, Dict[str, Any]]:
@@ -768,6 +806,7 @@ _KNOWN_ETF_TICKERS = frozenset(
 )
 
 
+# 시나리오: LLM이 테마명을 ETF 티커로만 줬을 때 — 키워드로 읽기 좋은 이름으로 바꾼다.
 def _normalize_theme_name(theme: Dict[str, Any]) -> str:
     """ETF 티커형 테마명을 키워드 기반 산업/서사명으로 보정한다."""
     name = str(theme.get("theme_name", "")).strip()
@@ -781,6 +820,7 @@ def _normalize_theme_name(theme: Dict[str, Any]) -> str:
     return name
 
 
+# 시나리오: 테마별 하방 리스크 3기준 중 하나 — 부정 키워드 뉴스 비중으로 내러티브 훼손 여부를 본다.
 def _check_narrative_damage(theme_name: str) -> bool:
     """테마에 대한 부정적 뉴스(규제, 실적 미달 등)가 상위에 노출되는지 확인한다."""
     query = f"{theme_name} risk regulation failure concerns setback 2026"
@@ -795,6 +835,7 @@ def _check_narrative_damage(theme_name: str) -> bool:
     return hit_count >= 3
 
 
+# 시나리오: 테마 대표 종목이 단기 과열 구간인지 — RSI·MA 이격으로 판별한다.
 def _is_technically_overheated(
     theme: Dict[str, Any],
     signals: Dict[str, Dict[str, Any]],
@@ -814,6 +855,7 @@ def _is_technically_overheated(
     return False
 
 
+# 시나리오: 금리·스프레드가 테마 유형에 역풍인지 — growth/cyclical 등에 따라 매크로 헤드윈드를 본다.
 def _assess_macro_headwind(
     theme: Dict[str, Any],
     macro_values: Dict[str, Optional[float]],
@@ -837,6 +879,7 @@ def _assess_macro_headwind(
     return False
 
 
+# 시나리오: 테마별로 CRITICAL/CAUTION/WATCH를 매기고 — 최종 리스크 문장에서 CRITICAL을 우선 경고하도록 정렬한다.
 def _score_themes(
     themes: List[Dict[str, Any]],
     signals: Dict[str, Dict[str, Any]],
@@ -877,6 +920,7 @@ def _score_themes(
     return scored
 
 
+# 시나리오: 군집 evidence 아래에 붙일 — 테마별 플래그·지표 요약 문자열을 만든다.
 def _format_theme_evidence(
     themes: List[Dict[str, Any]],
     signals: Dict[str, Dict[str, Any]],
@@ -922,6 +966,7 @@ def _format_theme_evidence(
 
 
 # LLM 미사용/실패 시 최소 출력 계약을 유지하는 폴백
+# 시나리오: API 키 없음·LLM 실패 시 — 짧은 고정 문구로 파이프라인이 끊기지 않게 한다.
 def _build_fallback_result(state: AgentState) -> str:
     return (
         "현재 FRED 금리 환경과 시장 데이터를 종합하면 "
@@ -931,6 +976,7 @@ def _build_fallback_result(state: AgentState) -> str:
 
 
 # 최종 출력에서 티커 패턴 추출 (노이즈 제외)
+# 시나리오: 생성된 리스크 텍스트가 형식 검증을 통과했는지 — 티커 개수를 셀 때 쓴다.
 def _extract_tickers(text: str) -> List[str]:
     candidates = re.findall(r"\b[A-Z]{1,5}\b", text.upper())
     seen: List[str] = []
@@ -941,10 +987,12 @@ def _extract_tickers(text: str) -> List[str]:
 
 
 # Acceptance Criteria: 대표주 2개 이상 포함 여부
+# 시나리오: 품질 게이트 — 최소 티커 개수 충족 여부.
 def _has_enough_tickers(text: str) -> bool:
     return len(_extract_tickers(text)) >= 2
 
 
+# 시나리오: LLM 재시도 여부 결정 — 1~3위 블록·종목 2개·근거 5줄 형식을 정규식으로 검사한다.
 def _has_required_risk_format(text: str) -> bool:
     """요구 출력 형식(1~3위 반복 구조 + 각 2티커 + 근거 5줄)을 최소 검증한다."""
     normalized = text.replace("\r\n", "\n")
@@ -978,6 +1026,7 @@ def _has_required_risk_format(text: str) -> bool:
 # ═══════════════════════════════════════════════════════════════
 # LLM 체인 호출
 # ═══════════════════════════════════════════════════════════════
+# 시나리오: evidence·macro_result·retry_hint를 넣어 — 최종 경보 본문 한 번 생성한다.
 def _generate_risk_text(
     chain: Any,
     evidence: str,
@@ -1000,6 +1049,7 @@ def _generate_risk_text(
 # 흐름: 수집 → 엔티티 추출 → 시장 신호 부착 → 군집화 → 점수화
 #       → LLM 경보 생성 → 검증/재시도 → state 저장
 # ═══════════════════════════════════════════════════════════════
+# 시나리오: Portfolio 이후 GP 통과 시 — 매크로와 뉴스·시장 데이터를 합쳐 risk_result·GP용 current_report를 채운다.
 def risk_node(state: AgentState) -> Dict[str, Any]:
     macro_result = state.get(StateKey.MACRO_RESULT, "매크로 요약 없음")
 
@@ -1169,4 +1219,15 @@ def risk_node(state: AgentState) -> Dict[str, Any]:
     except Exception as err:
         result = f"{_build_fallback_result(state)} LLM 연결 오류: {err}"
 
-    return {StateKey.RISK_RESULT: result, StateKey.CURRENT_REPORT: result, "last_node": AgentName.RISK}
+    risk_sources = _article_source_links(articles, "[리스크 뉴스]") + _article_source_links(
+        theme_articles,
+        "[리스크·테마 뉴스]",
+    )
+    merged_sources = merge_report_source_links(state.get(StateKey.REPORT_SOURCE_LINKS), risk_sources)
+
+    return {
+        StateKey.RISK_RESULT: result,
+        StateKey.CURRENT_REPORT: result,
+        StateKey.REPORT_SOURCE_LINKS: merged_sources,
+        "last_node": AgentName.RISK,
+    }

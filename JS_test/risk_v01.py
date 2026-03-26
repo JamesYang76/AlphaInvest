@@ -1,3 +1,5 @@
+"""JS_test 레거시 실험 스냅샷 — 파이프라인에서의 역할·시나리오 설명은 agents/nodes/risk.py 본선의 함수 주석을 따른다."""
+
 import json
 import os
 import re

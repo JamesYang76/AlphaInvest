@@ -6,7 +6,13 @@ from langchain_core.prompts import ChatPromptTemplate
 
 from agents.constants import AgentName, StateKey
 from agents.state import AgentState
-from data.fetchers import fetch_macro_data, fetch_news, get_llm
+from data.fetchers import (
+    fetch_macro_data,
+    fetch_news_with_sources,
+    get_llm,
+    macro_numeric_source_links,
+    merge_report_source_links,
+)
 from utils.logger import get_logger
 
 logger = get_logger("agents.nodes.macro")
@@ -30,11 +36,19 @@ MACRO_SYSTEM_PROMPT = dedent("""
 """).strip()
 
 
+# 시나리오: 파이프라인 최초 노드(START→Macro) — FRED·yfinance·Tavily로 거시 데이터를 모으고 LLM 요약을 macro_result·macro_data·GP 검수용 current_report에 넣는다.
 def macro_node(state: AgentState) -> Dict[str, Any]:
     # ① 실시간 데이터 수집 (지표 및 뉴스)
     macro_data = fetch_macro_data()
     # 쿼리에 팩트체크용 최신 맥락을 강화
-    news = fetch_news("Current Federal Reserve inflation economic outlook and global market trends")
+    news, tavily_links = fetch_news_with_sources(
+        "Current Federal Reserve inflation economic outlook and global market trends",
+        link_prefix="[거시 뉴스]",
+    )
+    source_links = merge_report_source_links(
+        state.get(StateKey.REPORT_SOURCE_LINKS),
+        macro_numeric_source_links() + tavily_links,
+    )
 
     # ② LLM 설정 (분석의 일관성을 위해 온도는 낮게 설정)
     llm = get_llm(temperature=0.3)
@@ -90,6 +104,7 @@ def macro_node(state: AgentState) -> Dict[str, Any]:
         StateKey.MACRO_RESULT: result_text,
         StateKey.CURRENT_REPORT: result_text,  # 💡 GP 검수용 공통 리포트 필드 추가
         StateKey.MACRO_DATA: macro_data,  # 💡 후속 노드(Risk 등)에서 재사용할 수 있도록 원시 데이터 보관
+        StateKey.REPORT_SOURCE_LINKS: source_links,
         "last_node": AgentName.MACRO,
     }
 
