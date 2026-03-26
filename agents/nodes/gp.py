@@ -27,6 +27,9 @@ def gp_node(state: AgentState) -> Dict[str, Any]:
     # 데이터 확보
     target_result = state.get(StateKey.CURRENT_REPORT, "분석 내용 누락")
     macro_result = state.get(StateKey.MACRO_RESULT, "분류되지 않음")
+    risk_result = state.get(StateKey.RISK_RESULT, "해당 없음")
+    portfolio_result = state.get(StateKey.PORTFOLIO_RESULT, "해당 없음")
+
     macro_data = state.get(StateKey.MACRO_DATA, {})
     macro_data_str = ", ".join([f"{k}: {v}" for k, v in macro_data.items()]) if macro_data else "정보 없음"
 
@@ -44,16 +47,19 @@ def gp_node(state: AgentState) -> Dict[str, Any]:
                     {target_result}
 
                     ---
-                    [실시간 참조 데이터 (심사 팩트체크 기준)]
-                    - 거시경제 주요 지표 수치: {macro_data_str}
-                    - 거시경제 시황 요약: {macro_result}
+                    [실시간 참조 데이터 (심사 및 교차 검증 기준)]
+                    1. 거시경제 지표: {macro_data_str}
+                    2. 거시경제 시황: {macro_result}
+                    3. 리스크 분석 결과: {risk_result}
+                    4. 포트폴리오 진단 결과: {portfolio_result}
 
                     ---
-                    [지침]
-                    1. '실시간 참조 데이터'와 상충되는 치명적인 팩트 오류가 있는지 확인하고 JSON으로 답변하세요.
-                    2. 주의:
-                       - 보고서에 포함된 개별 종목의 수치(PER, ROE, 매입가, 수익률, 손실률 등)는 시스템 외부에서 실시간으로 수집된 정당한 데이터입니다. 
-                       - 이 수치들이 '실시간 참조 데이터(거시)'에 없다는 이유만으로 '팩트 오류'로 판정하지 마십시오.
+                    [심사 지침]
+                    1. **에이전트 간 논리적 모순(Cross-Agent Contradiction) 확인**:
+                       - 특히 [3. 리스크 분석 결과]에서 '위험'이나 '기술적 과열'로 경고된 섹션/종목이 [알파 노드]에서 추천되고 있다면 치명적인 논리 모순으로 판정하세요.
+                       - [4. 포트폴리오 진단]의 매도 의견과 [알파 노드]의 추천이 상충되는지 확인하세요.
+                    2. **팩트 체크**: '거시경제 지표' 수치가 보고서 본문에 정확히 반영되어 있는지 확인하세요.
+                    3. **주의**: 개별 종목의 구체적 지표(PER 등)가 참조 데이터(거시)에 없다는 이유로 반려하지 마세요. 오직 '데이터 간의 충돌'과 '내부 모순'에 집중하세요.
                 """).strip(),
             ),
         ]
@@ -66,6 +72,8 @@ def gp_node(state: AgentState) -> Dict[str, Any]:
                 "last_node": last_node,
                 "target_result": target_result,
                 "macro_result": macro_result,
+                "risk_result": risk_result,
+                "portfolio_result": portfolio_result,
                 "macro_data_str": macro_data_str,
             }
         )

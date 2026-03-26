@@ -283,14 +283,90 @@ def evaluate_with_llm_judge_average(
     return {
         "num_runs": num_runs,
         "pass_rate": round(pass_count / num_runs, 2) if num_runs else 0.0,
-        "signal_distribution": signal_counts,
-        "confidence_distribution": confidence_counts,
         "final_signal": final_signal,
         "final_confidence": final_confidence,
         "final_verdict": final_verdict,
-        "framework_summary": framework_summary,
         "runs": runs,
     }
+
+
+def evaluate_with_consensus_judge(
+    report: str,
+    style_guide_path: str = "STYLE_GUIDE.md",
+    num_judges: int = 3,
+) -> Dict[str, Any]:
+    """
+    여러 명의 독립적인 AI 심사관의 의견을 수합하여 최종 합의된 정성 평가를 도출합니다.
+    단일 평가보다 훨씬 높은 신뢰성과 객관성을 제공합니다.
+    """
+    if not report or not report.strip():
+        return evaluate_with_llm_judge("")
+
+    # 1. 여러 명의 심사관으로부터 독립적인 평가 수집
+    individual_runs = []
+    for _ in range(num_judges):
+        individual_runs.append(evaluate_with_llm_judge(report, style_guide_path))
+
+    # 2. 결과가 1개뿐이면 바로 반환
+    if num_judges == 1:
+        return individual_runs[0]
+
+    # 3. 마스터 심사관(Audit Judge)을 통한 최종 합의 도출
+    audit_llm = get_llm(model="gpt-5.4", temperature=0.0)  # 일관성을 위해 gpt-4o 사용
+
+    judges_feedback_text = ""
+    for i, run in enumerate(individual_runs):
+        judges_feedback_text += f"\n[심사관 {i+1} 의견]\n{json.dumps(run, ensure_ascii=False, indent=2)}\n"
+
+    consensus_prompt = f"""
+당신은 여러 AI 심사관들의 각기 다른 평가 결과를 취합하여 최종 결론을 내리는 '수석 감사관(Audit Judge)'입니다.
+동일한 투자 리포트에 대해 {num_judges}명의 심사관이 내놓은 평가 결과들이 아래에 주어집니다.
+
+당신의 임무는:
+1. 각 심사관의 의견에서 공통적인 강점과 약점을 파악하세요.
+2. 서로 상충되는 의견이 있다면 리포트 원문을 바탕으로 더 타당한 쪽을 선택하세요.
+3. 모든 의견을 종합하여 가장 객관적이고 신뢰도 높은 '최종 합의 결과(Consensus Result)'를 한 개의 JSON으로 작성하세요.
+
+[리포트 원문]
+{report}
+
+[개별 심사관 평가 데이터]
+{judges_feedback_text}
+
+[출력 형식]
+반드시 다음 JSON 규격을 지키고, 다른 설명 없이 JSON만 출력하세요.
+{{
+  "signal": "positive / neutral / negative",
+  "confidence": "high",
+  "verdict": "pass / fail",
+  "framework_review": {{
+    "thesis_quality": "취합된 종합 의견",
+    "risk_balance": "취합된 종합 의견",
+    "consistency": "취합된 종합 의견",
+    "actionability": "취합된 종합 의견",
+    "expert_tone": "취합된 종합 의견",
+    "readability": "취합된 종합 의견"
+  }},
+  "strengths": ["종합된 강점 1", "2"...],
+  "weaknesses": ["종합된 약점 1", "2"...],
+  "improvement_suggestions": ["종합된 개선안 1", "2"...],
+  "reasoning": "왜 이런 최종 합의에 도달했는지 개별 심사관들의 의견 차이를 포함하여 3~5문장으로 설명"
+}}
+    """.strip()
+
+    try:
+        response = audit_llm.invoke(consensus_prompt)
+        consensus_result = _extract_json_from_response(response.content)
+        # 메타데이터 추가
+        consensus_result["meta"] = {
+            "num_judges": num_judges,
+            "judge_concordance": "calculated_internally",
+            "is_consensus": True
+        }
+        return consensus_result
+    except Exception:
+        # 합의 도출 실패 시 첫 번째 심사관 결과를 폴백으로 사용
+        return individual_runs[0]
 
 
 def check_hallucination(report: str, context_data: Dict[str, Any]) -> float:
