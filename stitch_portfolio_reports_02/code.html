@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AlphaInvest | Data Storytelling Terminal</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700;800;900&amp;family=Open+Sans:wght@300;400;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "on-surface": "#1c1c15",
+              "outline-variant": "#c5c6cc",
+              "error": "#ba1a1a",
+              "on-error": "#ffffff",
+              "background": "#fdf9ee",
+              "surface-variant": "#e6e2d8",
+              "surface-container-high": "#ece8dd",
+              "surface-container-lowest": "#ffffff",
+              "primary": "#040d17",
+              "on-primary": "#ffffff",
+              "secondary": "#5b5e64",
+              "surface": "#fdf9ee",
+              "on-surface-variant": "#44474b",
+              "surface-container": "#f2eee3",
+              "surface-container-low": "#f7f3e8",
+              "outline": "#75777c",
+            },
+            fontFamily: {
+              "headline": ["Montserrat", "sans-serif"],
+              "body": ["Open Sans", "sans-serif"],
+              "data": ["Montserrat", "sans-serif"]
+            },
+          },
+        },
+      }
+    </script>
+<style type="text/tailwindcss">
+        @layer base {
+            body {
+                @apply bg-background text-on-surface font-body antialiased overflow-x-hidden;
+            }
+            h1, h2, h3, .data-viz {
+                @apply font-headline;
+            }
+        }
+        .hero-block {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            padding: 4rem 2rem;
+            border-bottom: 1px solid rgba(0,0,0,0.05);
+        }
+        .trend-line-bg {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: 120px;
+            opacity: 0.1;
+            pointer-events: none;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            height: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f1f1;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #040d17;
+        }
+        .snap-container {
+            scroll-snap-type: y mandatory;
+            height: 100vh;
+            overflow-y: scroll;
+        }
+        .snap-section {
+            scroll-snap-align: start;
+        }
+    </style>
+</head>
+<body>
+<header class="fixed top-0 left-0 w-full z-50 flex justify-between items-center px-8 py-6 mix-blend-difference invert">
+<div class="flex items-center gap-12">
+<span class="font-headline text-2xl font-black tracking-tighter">AlphaInvest</span>
+<nav class="hidden md:flex gap-8">
+<a class="font-headline font-bold text-sm uppercase tracking-widest border-b-2 border-current" href="#">Home</a>
+<a class="font-headline font-bold text-sm uppercase tracking-widest opacity-50 hover:opacity-100 transition-opacity" href="#">Portfolio</a>
+<a class="font-headline font-bold text-sm uppercase tracking-widest opacity-50 hover:opacity-100 transition-opacity" href="#">Insights</a>
+</nav>
+</div>
+<div class="flex items-center gap-6">
+<button class="bg-white text-black px-8 py-3 text-xs font-black uppercase tracking-[0.2em]">Generate Report</button>
+</div>
+</header>
+<main class="snap-container">
+<section aria-label="Market Snapshot" class="hero-block snap-section relative bg-background">
+<div class="max-w-7xl mx-auto w-full">
+<div class="mb-20">
+<p class="font-headline font-black text-xs uppercase tracking-[0.4em] text-on-surface-variant mb-4">Real-Time Intelligence / Oct 24, 2023</p>
+<h1 class="text-[12vw] leading-none font-black tracking-tighter uppercase">Market Pulse</h1>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+<div class="group relative overflow-hidden p-8 border-l-4 border-primary bg-surface-container-low hover:bg-surface-container-high transition-all">
+<div class="flex justify-between items-start mb-12">
+<span class="text-xs font-black uppercase tracking-widest">S&amp;P 500</span>
+<span class="text-[10px] font-bold px-2 py-1 bg-[#E8F5E9] text-[#2E7D32]">STABLE</span>
+</div>
+<div class="data-viz text-7xl font-black tracking-tighter mb-2">4,373.63</div>
+<div class="text-lg font-bold text-[#2E7D32] flex items-center gap-1">
+<span class="material-symbols-outlined font-black">arrow_upward</span> +0.73%
+                    </div>
+<svg class="trend-line-bg" preserveAspectRatio="none" viewBox="0 0 400 100">
+<path d="M0,80 Q50,70 100,75 T200,60 T300,65 T400,40" fill="none" stroke="currentColor" stroke-width="4"></path>
+</svg>
+</div>
+<div class="group relative overflow-hidden p-8 border-l-4 border-primary bg-surface-container-low hover:bg-surface-container-high transition-all">
+<div class="flex justify-between items-start mb-12">
+<span class="text-xs font-black uppercase tracking-widest">CPI (YOY)</span>
+<span class="text-[10px] font-bold px-2 py-1 bg-[#FFF3E0] text-[#E65100]">ELEVATED</span>
+</div>
+<div class="data-viz text-7xl font-black tracking-tighter mb-2">3.7%</div>
+<div class="text-lg font-bold text-on-surface-variant">UNCHANGED</div>
+<svg class="trend-line-bg" preserveAspectRatio="none" viewBox="0 0 400 100">
+<path d="M0,50 L400,50" fill="none" stroke="currentColor" stroke-width="4"></path>
+</svg>
+</div>
+<div class="group relative overflow-hidden p-8 border-l-4 border-primary bg-surface-container-low hover:bg-surface-container-high transition-all">
+<div class="flex justify-between items-start mb-12">
+<span class="text-xs font-black uppercase tracking-widest">Unemployment</span>
+<span class="text-[10px] font-bold px-2 py-1 bg-[#E8F5E9] text-[#2E7D32]">HEALTHY</span>
+</div>
+<div class="data-viz text-7xl font-black tracking-tighter mb-2">3.8%</div>
+<div class="text-lg font-bold text-[#BA1A1A] flex items-center gap-1">
+<span class="material-symbols-outlined font-black">arrow_upward</span> +0.1%
+                    </div>
+<svg class="trend-line-bg" preserveAspectRatio="none" viewBox="0 0 400 100">
+<path d="M0,90 L100,85 L200,88 L300,70 L400,65" fill="none" stroke="currentColor" stroke-width="4"></path>
+</svg>
+</div>
+<div class="group relative overflow-hidden p-8 border-l-4 border-primary bg-surface-container-low hover:bg-surface-container-high transition-all">
+<div class="flex justify-between items-start mb-12">
+<span class="text-xs font-black uppercase tracking-widest">VIX Index</span>
+<span class="text-[10px] font-bold px-2 py-1 bg-[#FFEBEE] text-[#C62828]">VOLATILE</span>
+</div>
+<div class="data-viz text-7xl font-black tracking-tighter mb-2">18.24</div>
+<div class="text-lg font-bold text-[#BA1A1A] flex items-center gap-1">
+<span class="material-symbols-outlined font-black">arrow_upward</span> +4.21%
+                    </div>
+<svg class="trend-line-bg" preserveAspectRatio="none" viewBox="0 0 400 100">
+<path d="M0,80 L50,40 L100,90 L150,20 L200,70 L250,10 L300,60 L350,5 L400,40" fill="none" stroke="currentColor" stroke-width="4"></path>
+</svg>
+</div>
+</div>
+</div>
+</section>
+<section class="hero-block snap-section bg-primary text-on-primary">
+<div class="max-w-7xl mx-auto w-full">
+<div class="flex justify-between items-end mb-12">
+<div>
+<p class="font-headline font-black text-xs uppercase tracking-[0.4em] text-outline-variant mb-4">Sector Momentum</p>
+<h2 class="text-6xl font-black tracking-tighter uppercase">Market Movers</h2>
+</div>
+<div class="flex gap-4 mb-4">
+<button class="w-12 h-12 border border-outline-variant flex items-center justify-center hover:bg-white hover:text-primary transition-colors">
+<span class="material-symbols-outlined">arrow_back</span>
+</button>
+<button class="w-12 h-12 border border-outline-variant flex items-center justify-center hover:bg-white hover:text-primary transition-colors">
+<span class="material-symbols-outlined">arrow_forward</span>
+</button>
+</div>
+</div>
+<div class="flex gap-8 overflow-x-auto pb-12 custom-scrollbar snap-x">
+<div class="min-w-[400px] snap-center bg-surface-container-lowest text-primary p-12">
+<div class="flex justify-between items-start mb-8">
+<span class="bg-[#2E7D32] text-white text-[10px] font-black px-3 py-1 uppercase tracking-widest">Alpha Performer</span>
+<span class="text-5xl font-black opacity-10">01</span>
+</div>
+<div class="font-headline text-8xl font-black mb-2">NVDA</div>
+<p class="text-sm font-bold opacity-60 uppercase tracking-widest mb-12">Technology | Score 98.4</p>
+<div class="flex items-end justify-between border-t border-outline-variant pt-6">
+<span class="text-xs font-bold uppercase tracking-widest opacity-60">20D Change</span>
+<span class="text-5xl font-black text-[#2E7D32]">+12.4%</span>
+</div>
+</div>
+<div class="min-w-[400px] snap-center bg-surface-container-lowest text-primary p-12">
+<div class="flex justify-between items-start mb-8">
+<span class="bg-[#2E7D32] text-white text-[10px] font-black px-3 py-1 uppercase tracking-widest">Alpha Performer</span>
+<span class="text-5xl font-black opacity-10">02</span>
+</div>
+<div class="font-headline text-8xl font-black mb-2">LLY</div>
+<p class="text-sm font-bold opacity-60 uppercase tracking-widest mb-12">Healthcare | Score 94.1</p>
+<div class="flex items-end justify-between border-t border-outline-variant pt-6">
+<span class="text-xs font-bold uppercase tracking-widest opacity-60">20D Change</span>
+<span class="text-5xl font-black text-[#2E7D32]">+8.2%</span>
+</div>
+</div>
+<div class="min-w-[400px] snap-center bg-surface-container-lowest text-primary p-12">
+<div class="flex justify-between items-start mb-8">
+<span class="bg-[#BA1A1A] text-white text-[10px] font-black px-3 py-1 uppercase tracking-widest">Market Laggard</span>
+<span class="text-5xl font-black opacity-10">01</span>
+</div>
+<div class="font-headline text-8xl font-black mb-2">PFE</div>
+<p class="text-sm font-bold opacity-60 uppercase tracking-widest mb-12">Healthcare | Score 12.5</p>
+<div class="flex items-end justify-between border-t border-outline-variant pt-6">
+<span class="text-xs font-bold uppercase tracking-widest opacity-60">20D Change</span>
+<span class="text-5xl font-black text-[#BA1A1A]">-14.2%</span>
+</div>
+</div>
+<div class="min-w-[400px] snap-center bg-surface-container-lowest text-primary p-12">
+<div class="flex justify-between items-start mb-8">
+<span class="bg-[#2E7D32] text-white text-[10px] font-black px-3 py-1 uppercase tracking-widest">Alpha Performer</span>
+<span class="text-5xl font-black opacity-10">03</span>
+</div>
+<div class="font-headline text-8xl font-black mb-2">MSFT</div>
+<p class="text-sm font-bold opacity-60 uppercase tracking-widest mb-12">Technology | Score 91.8</p>
+<div class="flex items-end justify-between border-t border-outline-variant pt-6">
+<span class="text-xs font-bold uppercase tracking-widest opacity-60">20D Change</span>
+<span class="text-5xl font-black text-[#2E7D32]">+6.5%</span>
+</div>
+</div>
+</div>
+<div class="mt-8 bg-white/5 p-6 border border-white/10 flex items-center justify-between">
+<span class="text-xs font-bold tracking-widest opacity-60 uppercase">Detailed Metrics Panel</span>
+<button class="flex items-center gap-2 text-xs font-black uppercase tracking-widest hover:underline">
+                    Expand Comparative View <span class="material-symbols-outlined text-sm">open_in_full</span>
+</button>
+</div>
+</div>
+</section>
+<section class="hero-block snap-section bg-background">
+<div class="max-w-7xl mx-auto w-full flex flex-col gap-12">
+<div>
+<p class="font-headline font-black text-xs uppercase tracking-[0.4em] text-on-surface-variant mb-4">Asset Management</p>
+<h2 class="text-8xl font-black tracking-tighter uppercase leading-tight">Portfolio<br/>Intelligence</h2>
+</div>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-12 items-start">
+<div class="bg-primary text-on-primary p-12 flex flex-col gap-8 shadow-2xl">
+<div class="flex items-center gap-4">
+<span class="w-3 h-3 rounded-full bg-error"></span>
+<span class="w-3 h-3 rounded-full bg-yellow-500"></span>
+<span class="w-3 h-3 rounded-full bg-green-500"></span>
+<span class="ml-4 text-[10px] font-black uppercase tracking-[0.3em] opacity-40">Ticker Input Terminal v2.0</span>
+</div>
+<textarea class="w-full bg-transparent border-none focus:ring-0 text-3xl font-headline font-bold placeholder:opacity-20 min-h-[300px] p-0" placeholder="TYPE TICKERS &amp; PRICES... (e.g. NVDA 450.00)"></textarea>
+<div class="flex flex-col sm:flex-row gap-4">
+<button class="flex-1 bg-white text-primary py-6 text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-3 hover:bg-outline-variant transition-colors">
+<span class="material-symbols-outlined font-black">psychology</span>
+                            Market Report
+                        </button>
+<button class="flex-1 border border-white/30 text-white py-6 text-xs font-black uppercase tracking-[0.2em] flex items-center justify-center gap-3 hover:bg-white/10 transition-colors">
+<span class="material-symbols-outlined font-black">verified</span>
+                            Verification
+                        </button>
+</div>
+</div>
+<div class="bg-surface-container-lowest p-12 shadow-xl border border-primary/5">
+<div class="flex justify-between items-center mb-12 border-b-4 border-primary pb-6">
+<h3 class="text-2xl font-black uppercase tracking-widest">Active Holdings</h3>
+<span class="text-xs font-black uppercase tracking-widest opacity-40">Verified Live</span>
+</div>
+<div class="space-y-6">
+<div class="grid grid-cols-6 items-center gap-4 py-4 border-b border-black/5 hover:bg-surface-container-low transition-colors px-4 -mx-4">
+<div class="col-span-2 font-headline font-black text-3xl">AAPL</div>
+<div class="col-span-1 text-xs font-bold text-on-surface-variant">$178.12</div>
+<div class="col-span-1 text-xs font-bold text-[#2E7D32]">+2.1% (5D)</div>
+<div class="col-span-1">
+<div class="w-full h-1 bg-black/5 overflow-hidden">
+<div class="bg-primary h-full" style="width: 64%"></div>
+</div>
+<span class="text-[10px] font-black uppercase">RSI 64</span>
+</div>
+<div class="col-span-1 text-right">
+<span class="material-symbols-outlined text-sm opacity-20">info</span>
+</div>
+</div>
+<div class="grid grid-cols-6 items-center gap-4 py-4 border-b border-black/5 hover:bg-surface-container-low transition-colors px-4 -mx-4">
+<div class="col-span-2 font-headline font-black text-3xl">TSLA</div>
+<div class="col-span-1 text-xs font-bold text-on-surface-variant">$254.80</div>
+<div class="col-span-1 text-xs font-bold text-[#BA1A1A]">-3.4% (5D)</div>
+<div class="col-span-1">
+<div class="w-full h-1 bg-black/5 overflow-hidden">
+<div class="bg-primary h-full" style="width: 42%"></div>
+</div>
+<span class="text-[10px] font-black uppercase">RSI 42</span>
+</div>
+<div class="col-span-1 text-right">
+<span class="material-symbols-outlined text-sm text-[#E65100]">warning</span>
+</div>
+</div>
+<div class="grid grid-cols-6 items-center gap-4 py-4 border-b border-black/5 hover:bg-surface-container-low transition-colors px-4 -mx-4">
+<div class="col-span-2 font-headline font-black text-3xl">META</div>
+<div class="col-span-1 text-xs font-bold text-on-surface-variant">$312.44</div>
+<div class="col-span-1 text-xs font-bold text-[#2E7D32]">+5.2% (5D)</div>
+<div class="col-span-1">
+<div class="w-full h-1 bg-black/5 overflow-hidden">
+<div class="bg-[#BA1A1A] h-full" style="width: 78%"></div>
+</div>
+<span class="text-[10px] font-black uppercase">RSI 78</span>
+</div>
+<div class="col-span-1 text-right">
+<span class="material-symbols-outlined text-sm text-[#BA1A1A]">trending_up</span>
+</div>
+</div>
+</div>
+<button class="mt-12 w-full border-2 border-primary py-4 text-xs font-black uppercase tracking-[0.3em] hover:bg-primary hover:text-on-primary transition-all">
+                        Full Performance Audit
+                    </button>
+</div>
+</div>
+</div>
+</section>
+<footer class="snap-section bg-primary text-on-primary py-24 px-8">
+<div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start gap-12">
+<div class="max-w-md">
+<span class="font-headline text-4xl font-black mb-8 block tracking-tighter">AlphaInvest</span>
+<p class="text-sm leading-relaxed opacity-60 font-light">Providing institutional-grade market analysis and portfolio verification for the modern strategist. Data delayed by 15 minutes unless otherwise noted.</p>
+</div>
+<div class="grid grid-cols-2 gap-20">
+<div>
+<h4 class="text-[10px] font-black uppercase tracking-[0.4em] mb-8 opacity-40">Intelligence</h4>
+<ul class="text-xs font-bold space-y-4 uppercase tracking-widest">
+<li class="hover:opacity-60 transition-opacity cursor-pointer">Daily Briefings</li>
+<li class="hover:opacity-60 transition-opacity cursor-pointer">Sector Rotation</li>
+<li class="hover:opacity-60 transition-opacity cursor-pointer">Risk Modeling</li>
+<li class="hover:opacity-60 transition-opacity cursor-pointer">White Papers</li>
+</ul>
+</div>
+<div>
+<h4 class="text-[10px] font-black uppercase tracking-[0.4em] mb-8 opacity-40">Account</h4>
+<ul class="text-xs font-bold space-y-4 uppercase tracking-widest">
+<li class="hover:opacity-60 transition-opacity cursor-pointer">Verified Terminal</li>
+<li class="hover:opacity-60 transition-opacity cursor-pointer">Portfolio Sync</li>
+<li class="hover:opacity-60 transition-opacity cursor-pointer">Alert Center</li>
+<li class="hover:opacity-60 transition-opacity cursor-pointer">Support</li>
+</ul>
+</div>
+</div>
+</div>
+<div class="max-w-7xl mx-auto mt-24 pt-12 border-t border-white/10 flex justify-between items-center opacity-40 text-[10px] font-black uppercase tracking-[0.5em]">
+<span>© 2023 ALPHAINVEST</span>
+<span>DATA-DRIVEN STORYTELLING</span>
+</div>
+</footer>
+</main>
+<div class="fixed right-8 top-1/2 -translate-y-1/2 flex flex-col gap-6 z-50 mix-blend-difference invert">
+<div class="w-1.5 h-1.5 rounded-full bg-white"></div>
+<div class="w-1.5 h-1.5 rounded-full bg-white opacity-20"></div>
+<div class="w-1.5 h-1.5 rounded-full bg-white opacity-20"></div>
+<div class="w-1.5 h-1.5 rounded-full bg-white opacity-20"></div>
+</div>
+
+</body></html>

@@ -53,6 +53,7 @@ TICKER_ALIASES: Dict[str, List[str]] = {
 # =========================================================
 
 
+# 시나리오: 벤치마크에서 기대 entity가 리포트에 있는지 볼 때 — 본문+동의어 매칭으로 한 항목을 판별한다.
 def _resolve_entity(entity: str, report_lower: str) -> bool:
     """entity 또는 그 동의어 중 하나라도 리포트에 있으면 True."""
     base = [entity.lower()]
@@ -68,6 +69,7 @@ def _resolve_entity(entity: str, report_lower: str) -> bool:
 # =========================================================
 
 
+# 시나리오: 평가 스크립트가 CIO 리포트 품질을 셀 때 — 골든 샘플의 기대 엔티티가 얼마나 등장했는지 비율로 낸다.
 def calculate_extraction_score(actual_report: str, expected_entities: List[str]) -> float:
     """
     기대했던 주요 경제 지표(Entity)들이 CIO 최종 리포트에 포함되었는지 점수화합니다.
@@ -87,6 +89,7 @@ def calculate_extraction_score(actual_report: str, expected_entities: List[str])
 # =========================================================
 
 
+# 시나리오: 파이프라인 산출물 QA — 거시·포트·리스크·알파 네 섹션 제목/키워드가 모두 있는지 체크한다.
 def evaluate_cio_report_structure(report: str) -> Dict[str, bool]:
     """
     CIO 최종 리포트가 요구된 4대 핵심 섹션을 모두 포함하고 있는지 검증합니다.
@@ -109,6 +112,7 @@ def evaluate_cio_report_structure(report: str) -> Dict[str, bool]:
 # =========================================================
 
 
+# 시나리오: (선택) 거시 VIX와 별도 리스크 점수 필드가 함께 있을 때 — 극단적 모순이 없는지 본다.
 def evaluate_numeric_consistency(macro_data: Dict[str, Any], risk_data: Dict[str, Any]) -> bool:
     """거시 지표(VIX 등)와 리스크 스코어 간의 논리적 모순 여부를 검증합니다."""
     vix = float(macro_data.get("vix", 20))
@@ -122,6 +126,7 @@ def evaluate_numeric_consistency(macro_data: Dict[str, Any], risk_data: Dict[str
 # =========================================================
 
 
+# 시나리오: CIO 리포트가 형식만 갖춘 빈 껍데인지 — 섹션별 단어 수로 충실도 점수를 낸다.
 def calculate_section_depth_score(report: str) -> Dict[str, Any]:
     """
     섹션별 단어 수를 측정하여 내용 충실도를 점수화합니다.
@@ -156,6 +161,7 @@ def calculate_section_depth_score(report: str) -> Dict[str, Any]:
 # =========================================================
 
 
+# 시나리오: 맞춤 리포트인지 확인 — 입력 포트폴리오 티커(별칭 포함)가 본문에 얼마나 등장하는지 측정한다.
 def calculate_ticker_mention_score(report: str, portfolio: List[Dict[str, Any]]) -> float:
     """
     포트폴리오의 각 티커(종목)가 리포트에 언급되었는지 측정합니다.
@@ -183,6 +189,7 @@ def calculate_ticker_mention_score(report: str, portfolio: List[Dict[str, Any]])
 # =========================================================
 
 
+# 시나리오: 리포트에 정량 근거가 충분한지 — 숫자·단위 패턴 밀도로 스코어를 낸다.
 def calculate_numeric_density_score(report: str) -> float:
     """
     리포트 내 숫자 데이터(%, 금리, 지수 등) 밀도를 측정합니다.
@@ -224,6 +231,7 @@ MARKET_INDICATORS_CHECKLIST: Dict[str, List[str]] = {
 }
 
 
+# 시나리오: 기관 리포트 수준의 시장 지표 커버리지 — 12개 체크리스트 키워드가 얼마나 들어갔는지 센다.
 def calculate_coverage_completeness_score(report: str) -> Dict[str, Any]:
     """
     전문 투자 리포트가 12개 핵심 시장 지표를 얼마나 커버하는지 측정합니다.
@@ -263,6 +271,7 @@ INDICATOR_EXTRACT_PATTERNS: Dict[str, List[str]] = {
 FACTUAL_TOLERANCE = 0.05
 
 
+# 시나리오: factual 점수 계산 시 — fetch_macro_data 문자열/숫자 혼합 값을 float으로 정규화한다.
 def _parse_macro_value(raw: Any) -> Optional[float]:
     """fetch_macro_data() 반환값("3.64%" 또는 3.64)을 float으로 변환."""
     if raw is None or raw == "N/A":
@@ -273,6 +282,7 @@ def _parse_macro_value(raw: Any) -> Optional[float]:
         return None
 
 
+# 시나리오: 환각 탐지 — 리포트에 적힌 금리·VIX 등이 실제 macro_data와 허용 오차 안에 맞는지 본다.
 def calculate_factual_grounding_score(
     report: str,
     macro_data: Optional[Dict[str, Any]] = None,
@@ -352,6 +362,7 @@ def calculate_factual_grounding_score(
 # =========================================================
 
 
+# 시나리오: 종합 점수의 completeness 축 — 섹션 존재(structure)와 단어 수(depth)를 평균한다.
 def calculate_completeness_score(
     structure_check: Dict[str, bool],
     section_depth: Dict[str, Any],
@@ -364,6 +375,7 @@ def calculate_completeness_score(
     return round((structure_score + depth_score) / 2, 4)
 
 
+# 시나리오: 종합 점수의 accuracy 축 — factual_grounding 결과를 0~1로 반영한다.
 def calculate_accuracy_score(
     factual_grounding: Optional[Dict[str, Any]] = None,
 ) -> float:
@@ -375,6 +387,7 @@ def calculate_accuracy_score(
     return round(factual_grounding.get("score", 1.0), 4)
 
 
+# 시나리오: 종합 점수의 relevance 축 — 엔티티 검출과 티커 언급을 평균한다.
 def calculate_relevance_score(
     extraction_score: float,
     ticker_score: float,
@@ -385,6 +398,7 @@ def calculate_relevance_score(
     return round((extraction_score + ticker_score) / 2, 4)
 
 
+# 시나리오: run_eval이 샘플별로 호출 — 4대 가중치로 completeness·accuracy·coverage·relevance를 한 번에 합산한다.
 def calculate_composite_score(
     extraction_score: float,
     structure_check: Dict[str, bool],

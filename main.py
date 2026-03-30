@@ -11,6 +11,7 @@ from utils.logger import get_logger
 logger = get_logger("main")
 
 
+# 시나리오: 사용자가 CLI로 파이프라인을 실행할 때의 진입점 — LangGraph를 스트림하며 Macro→Publish까지 상태를 누적하고 주요 결과 키별로 로그를 남긴다.
 def main():
     load_dotenv()  # .env 파일 로드
     logger.info("🚀 AlphaInvest 에이전트 실행을 시작합니다...")
