@@ -1,10 +1,11 @@
+# 데이터 기반 위험 군집 + 동적 테마 하이브리드 리스크 아키텍처
+
 import json
 import os
 import re
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
-from textwrap import dedent
 from typing import Any, Callable, Dict, List, Optional, TypeVar
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
@@ -29,22 +30,33 @@ except ImportError:
 if load_dotenv is not None:
     load_dotenv()
 
-RISK_SYSTEM_PROMPT = dedent("""
-    당신은 기관 자금의 하방 리스크를 먼저 차단하는 수석 리스크 매니저입니다.
-
-    [지침 - 논리적 일관성이 가장 중요함]
-    1. 인과관계 준수: 특정 데이터(예: 유가 하락)를 리스크 요인으로 선정했다면,
-       그로 인해 발생하는 실제 피해(예: 에너지 기업 매출 타격)가 인과상 맞아야 합니다.
-       (유가가 하락하는데 '에너지 비용 상승'을 리스크로 꼽는 모순적 주장은 절대 금지)
-    2. 데이터 현실성: 수치(예: 스프레드)를 언급할 때 단순히 숫자가 존재한다는 것만 보지 말고,
-       역사적 맥락에서 정말 위험한 수준(임계치 돌파 여부)인지 판단하세요.
-    3. 구체성: 두루뭉술한 위기감 조성 권유가 아닌, 데이터에 근거한 구체적인 위협 섹터와 종목을 매섭게 경고하세요.
-
-    [출력 가이드라인]
-    1. 반드시 1~3위 순위 형식에 맞춰 작성하세요.
-    2. 각 순위의 관련종목은 정확히 2개(티커 포함)만 제시하세요.
-    3. 리스크 근거는 각 순위별로 최소 5줄 이상 상세히 기술하되, 인과관계가 완벽해야 합니다.
-""").strip()
+# ─── System Prompt (유저 요청에 의해 수정 금지) ─────────────────────
+RISK_SYSTEM_PROMPT = (
+    "[Role]\n"
+    "너는 기관 자금의 하방 리스크를 먼저 차단하는 수석 리스크 매니저다.\n\n"
+    "[Instruction]\n"
+    "아래 제공되는 실시간 데이터(FRED 매크로 지표, 뉴스, Yahoo Finance 주가 흐름)를 "
+    "직접 분석하여 지금 가장 위험한 섹터를 스스로 선정하라.\n"
+    "고정된 섹터 목록은 없다. 데이터가 가리키는 곳을 따라가라.\n\n"
+    "[Output Format]\n"
+    "1. 반드시 5문장 이내로 작성한다.\n"
+    "2. 위험 섹터의 하락 배경을 논리적으로 설명한다.\n"
+    "3. 절대 피해야 할 대표 종목 2~3개를 티커(Ticker)와 함께강한 어조로 경고한다.\n"
+    "4. 티커는 반드시 본문에 등장한 데이터에서 근거가 있는 종목만 사용한다.\n"
+    "[Context]\n"
+    "아래 제공된 첨부파일 3개를 꼭 읽고 내 지시를 완벽히 따라줘.\n"
+    "1. TASKS.md: 전체 시스템 중 너의 역할과 목표는 "
+    "[ 본인 태스크 번호 및 제목, 예: 4번. Risk Alert ] 야. "
+    "다른 시스템은 신경 쓰지 말고 지정된 태스크에만 집중해.\n"
+    "2. STYLE_GUIDE.md: 네가 코딩할 때 무조건 지켜야 할 파이썬 코딩 룰이야. "
+    "(함수 100줄 이하, 선언적 코드 작성, 타입 힌팅 필수)\n"
+    "3. state.py: 우리가 주고받을 LangGraph의 핵심 데이터(State) 인터페이스야. "
+    "너의 입력과 출력은 반드시 이 스키마를 준수해야 해. "
+    "절대 무단으로 키값을 수정하거나 새로 만들지 마.\n"
+    "[Action]\n"
+    "자, 이제 숙지했으면 TASKS.md에 명시된 내 파트를 구현하기 위한 "
+    "최적의 파이썬 코드를 작성해 줘.\n\n"
+)
 
 # ─── 엔티티 추출 전용 프롬프트 ──────────────────────────────────
 ENTITY_EXTRACTION_PROMPT = (
@@ -272,7 +284,9 @@ def _build_macro_context() -> Dict[str, Any]:
     parts = [
         f"연방기금금리 {values['fed_funds_rate']:.2f}%" if values["fed_funds_rate"] else "연방기금금리 데이터 없음",
         f"미국채 10년물 {values['ten_year_yield']:.2f}%" if values["ten_year_yield"] else "10년물 데이터 없음",
-        f"하이일드 스프레드 {values['high_yield_spread']:.2f}" if values["high_yield_spread"] else "HY스프레드 데이터 없음",
+        f"하이일드 스프레드 {values['high_yield_spread']:.2f}"
+        if values["high_yield_spread"]
+        else "HY스프레드 데이터 없음",
     ]
     return {"summary": ", ".join(parts), "values": values}
 
@@ -578,7 +592,11 @@ def _score_cluster(
     cnt_factor = min(cluster.get("news_count", 0) / 3.0, 1.0)
     news_score = neg * 60 + cnt_factor * 40
 
-    returns = [market_signals[t].get("return_20d", 0) for t in cluster.get("tickers", []) if t in market_signals and "error" not in market_signals[t]]
+    returns = [
+        market_signals[t].get("return_20d", 0)
+        for t in cluster.get("tickers", [])
+        if t in market_signals and "error" not in market_signals[t]
+    ]
     market_score = min(max(-sum(returns) / max(len(returns), 1) * 5, 0), 100) if returns else 30
 
     kw = cluster.get("risk_keywords", []) + cluster.get("industry_terms", [])
@@ -921,13 +939,39 @@ def _format_theme_evidence(
 # ═══════════════════════════════════════════════════════════════
 
 
+# GP 피드백이 risk 대상일 때만 사유를 추출
+def _get_feedback_text(state: AgentState) -> str:
+    feedback = state.get(StateKey.GP_FEEDBACK, {})
+    if feedback.get("target_node") != AgentName.RISK:
+        return "현재 GP 피드백 없음"
+    return feedback.get("feedback_reason", "현재 GP 피드백 없음")
+
+
 # LLM 미사용/실패 시 최소 출력 계약을 유지하는 폴백
 def _build_fallback_result(state: AgentState) -> str:
+    fb = _get_feedback_text(state)
+    suffix = "" if fb == "현재 GP 피드백 없음" else f" GP 지적: '{fb}'"
     return (
         "현재 FRED 금리 환경과 시장 데이터를 종합하면 "
         "고금리 부담이 큰 섹터부터 우선 회피해야 합니다. "
         "구체적 데이터 확보 후 재분석이 필요합니다."
+        f"{suffix}"
     )
+
+
+def _format_llm_error(err: Exception) -> str:
+    error_name = err.__class__.__name__
+    error_text = str(err).strip() or "상세 메시지 없음"
+    normalized = error_text.lower()
+
+    if "connection error" in normalized or "apiconnectionerror" in error_name.lower():
+        return "OpenAI API 네트워크 연결 실패"
+    if "authentication" in normalized or "api key" in normalized or "401" in normalized:
+        return "OpenAI API 인증 실패"
+    if "rate limit" in normalized or "429" in normalized:
+        return "OpenAI API 호출 한도 초과"
+
+    return f"{error_name}: {error_text}"
 
 
 # 최종 출력에서 티커 패턴 추출 (노이즈 제외)
@@ -982,12 +1026,14 @@ def _generate_risk_text(
     chain: Any,
     evidence: str,
     macro_result: str,
+    feedback_text: str,
     retry_hint: str,
 ) -> str:
     resp = chain.invoke(
         {
             "evidence": evidence,
             "macro_result": macro_result,
+            "feedback_text": feedback_text,
             "retry_hint": retry_hint,
             "today": datetime.now().strftime("%Y-%m-%d"),
         }
@@ -1002,6 +1048,7 @@ def _generate_risk_text(
 # ═══════════════════════════════════════════════════════════════
 def risk_node(state: AgentState) -> Dict[str, Any]:
     macro_result = state.get(StateKey.MACRO_RESULT, "매크로 요약 없음")
+    feedback_text = _get_feedback_text(state)
 
     if not os.getenv("OPENAI_API_KEY"):
         return {StateKey.RISK_RESULT: _build_fallback_result(state)}
@@ -1012,48 +1059,10 @@ def risk_node(state: AgentState) -> Dict[str, Any]:
     )
 
     # ── Step 1: 데이터 수집 (기존 위험 뉴스 + 테마 뉴스) ──
-    # IMPORTANT:
-    #   macro.py에서 state[StateKey.MACRO_RESULT]로 전달된 매크로 요약을
-    #   risk의 evidence 생성에도 동일하게 반영해야 합니다.
-    #   그래서 macro_context의 "values"는 그대로 쓰되, "summary"만 state의 macro_result로 덮어씁니다.
     macro = _build_macro_context()
-    if isinstance(macro_result, str) and macro_result.strip() and macro_result != "매크로 요약 없음":
-        macro["summary"] = macro_result
-
-    # A안: macro.py에서 state[StateKey.MACRO_DATA]로 전달된 거시 값이 있으면
-    # risk의 점수 계산/판정에도 동일하게 반영합니다(가능한 키만 override, 없으면 fallback 유지).
-    macro_values = macro.get("values", {})
-    macro_data = state.get(StateKey.MACRO_DATA, {})
-    if isinstance(macro_data, dict) and macro_data:
-
-        def _as_float(v: Any) -> Optional[float]:
-            if v is None:
-                return None
-            if isinstance(v, (int, float)):
-                return float(v)
-            if isinstance(v, str):
-                cleaned = v.replace("%", "").strip()
-                try:
-                    return float(cleaned)
-                except ValueError:
-                    return None
-            return None
-
-        # risk.py가 기대하는 keys: fed_funds_rate, ten_year_yield, high_yield_spread
-        fed_rate = _as_float(macro_data.get("d_fed_rate")) or _as_float(macro_data.get("fed_rate"))
-        ten_year = _as_float(macro_data.get("ten_year_yield"))
-        hy_spread = _as_float(macro_data.get("high_yield_spread"))
-
-        if fed_rate is not None:
-            macro_values["fed_funds_rate"] = fed_rate
-        if ten_year is not None:
-            macro_values["ten_year_yield"] = ten_year
-        if hy_spread is not None:
-            macro_values["high_yield_spread"] = hy_spread
-
-        macro["values"] = macro_values
-
-    articles = _fetch_news_articles("US stock market sector risk downgrade credit default earnings miss refinancing pressure 2026")
+    articles = _fetch_news_articles(
+        "US stock market sector risk downgrade credit default earnings miss refinancing pressure 2026"
+    )
     theme_articles = _fetch_theme_news()
 
     # ── Step 2: 위험 엔티티 추출 + 투자 테마 추출 ──
@@ -1094,6 +1103,7 @@ def risk_node(state: AgentState) -> Dict[str, Any]:
                 "작성 기준일: {today}\n\n"
                 "기존 매크로 요약:\n{macro_result}\n\n"
                 "위험 군집 + 테마 분석 결과:\n{evidence}\n\n"
+                "검수 피드백:\n{feedback_text}\n\n"
                 "추가 지시:\n{retry_hint}\n\n"
                 "위 데이터를 기반으로 아래 형식에 맞춰 리스크 경보를 작성하세요.\n"
                 "형식은 반드시 1위~3위까지 반복한다:\n\n"
@@ -1142,6 +1152,7 @@ def risk_node(state: AgentState) -> Dict[str, Any]:
             chain=chain,
             evidence=combined_evidence,
             macro_result=macro_result,
+            feedback_text=feedback_text,
             retry_hint=(
                 "1위~3위 반복 형식을 엄격히 지켜라. "
                 "각 순위는 1.위험섹터/테마 2.관련종목 3.리스크 근거 순서를 따르라. "
@@ -1155,6 +1166,7 @@ def risk_node(state: AgentState) -> Dict[str, Any]:
                 chain=chain,
                 evidence=combined_evidence,
                 macro_result=macro_result,
+                feedback_text=feedback_text,
                 retry_hint=(
                     "직전 출력이 형식 기준을 만족하지 않았다. "
                     "반드시 1위/2위/3위 세 블록을 작성하고, "
@@ -1167,6 +1179,6 @@ def risk_node(state: AgentState) -> Dict[str, Any]:
         if not (_has_enough_tickers(result) and _has_required_risk_format(result)):
             result = _build_fallback_result(state)
     except Exception as err:
-        result = f"{_build_fallback_result(state)} LLM 연결 오류: {err}"
+        result = f"{_build_fallback_result(state)} LLM 연결 오류: {_format_llm_error(err)}"
 
-    return {StateKey.RISK_RESULT: result, StateKey.CURRENT_REPORT: result, "last_node": AgentName.RISK}
+    return {StateKey.RISK_RESULT: result}

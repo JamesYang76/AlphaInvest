@@ -12,28 +12,20 @@ class StateKey:
 
     # 1. 공통 데이터
     USER_PORTFOLIO: Final = "user_portfolio"
-    FAST_MODE: Final = "fast_mode"
-    RUNTIME_PROGRESS_CALLBACK: Final = "runtime_progress_callback"
-    RUNTIME_CANCEL_CHECK: Final = "runtime_cancel_check"
 
     # 2. 결과물(Result) 키
     MACRO_RESULT: Final = "macro_result"
     MACRO_DATA: Final = "macro_data"  # 💡 원시 거시 지표 데이터 저장용
-    MARKET_NEWS_SNIPPET: Final = "market_news_snippet"  # 💡 대시보드용 최신 뉴스 스니펫 재사용
     RISK_RESULT: Final = "risk_result"
     ALPHA_RESULT: Final = "alpha_result"
     PORTFOLIO_RESULT: Final = "portfolio_result"
-    CHART_RESULT: Final = "chart_result"  # 기술적 차트 요약 (Risk/Alpha 증거로 사용)
-    CHART_DATA: Final = "chart_data"  # (옵션) 원시 기술 지표
     CURRENT_REPORT: Final = "current_report"  # 💡 GP 심사용 공통 리포트 키
     FINAL_REPORT: Final = "final_report"
     NOTION_PAGE_URL: Final = "notion_page_url"  # 💡 Notion 발행 결과 URL
-    REPORT_SOURCE_LINKS: Final = "report_source_links"  # 💡 최종 리포트 하단 출처 링크 목록
 
     # 3. 메모리(Messages) 키
     MACRO_MESSAGES: Final = "macro_messages"
     RISK_MESSAGES: Final = "risk_messages"
-    CHART_MESSAGES: Final = "chart_messages"
     ALPHA_MESSAGES: Final = "alpha_messages"
     PORTFOLIO_MESSAGES: Final = "portfolio_messages"
 
@@ -50,7 +42,6 @@ class AgentName:
     RISK: Final = "risk_agent"
     ALPHA: Final = "alpha_agent"
     PORTFOLIO: Final = "portfolio_agent"
-    CHART: Final = "chart_agent"
     GP: Final = "gp_agent"
     CIO: Final = "cio_agent"
     PUBLISH: Final = "publish_agent"
