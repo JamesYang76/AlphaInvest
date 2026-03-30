@@ -3,6 +3,12 @@
 
 수익·변동성·낙폭·RSI·MA 괴리를 가중 합산해 100점 만점으로 환산한다.
 동일 유니버스(예: 섹터 ETF 묶음) 안에서만 min-max 정규화한다.
+
+가중치는 **약 3달(60거래일) 보유 관점**에 맞춘다.
+- 60일 수익 비중을 가장 크게: 목표 보유기간과 동일한 모멘텀 축.
+- 20일 수익은 보조 추세 확인: 최근 한 달의 확인 신호만 반영.
+- 60일 변동성과 6개월 낙폭을 함께 반영: 3개월 보유 중 체감할 리스크와 중기 스트레스 점검.
+- RSI·MA20 괴리는 과열/이격 확인용 보조 지표로 낮은 비중만 유지.
 """
 
 from __future__ import annotations
@@ -10,6 +16,14 @@ from __future__ import annotations
 from typing import Any, Dict
 
 import pandas as pd
+
+# 3개월 보유(~60거래일) 정렬 기준 — 합 1.0
+W_RET60 = 0.45
+W_RET20 = 0.15
+W_VOL60 = 0.15
+W_DD6M = 0.15
+W_RSI = 0.05
+W_MA20_DIV = 0.05
 
 
 def _safe_normalize(series: pd.Series) -> pd.Series:
@@ -23,30 +37,30 @@ def _safe_normalize(series: pd.Series) -> pd.Series:
 
 def calculate_composite_score(df: pd.DataFrame) -> pd.Series:
     """
-    컬럼: return_20d, return_5d, volatility_20d, drawdown_3m, rsi_14, ma5_divergence
-    가중치 합 1.0, 결과는 0~100 스케일.
+    컬럼: return_60d, return_20d, volatility_60d, drawdown_6m, rsi_14, ma20_divergence
+    가중치(W_RET60 … W_MA20_DIV) 합 1.0, 결과는 0~100 스케일.
     """
-    required = ["return_20d", "return_5d", "volatility_20d", "drawdown_3m", "rsi_14", "ma5_divergence"]
+    required = ["return_60d", "return_20d", "volatility_60d", "drawdown_6m", "rsi_14", "ma20_divergence"]
     for c in required:
         if c not in df.columns:
             raise KeyError(f"composite_score: missing column {c}")
 
+    s_ret60 = _safe_normalize(df["return_60d"])
     s_ret20 = _safe_normalize(df["return_20d"])
-    s_ret5 = _safe_normalize(df["return_5d"])
-    s_vol = 1.0 - _safe_normalize(df["volatility_20d"])
-    s_dd = 1.0 - _safe_normalize(df["drawdown_3m"].abs())
+    s_vol = 1.0 - _safe_normalize(df["volatility_60d"])
+    s_dd = 1.0 - _safe_normalize(df["drawdown_6m"].abs())
 
     rsi_n = _safe_normalize(df["rsi_14"])
     s_rsi = 1.0 - ((rsi_n - 0.5).abs() * 2.0)
-    s_div = 1.0 - _safe_normalize(df["ma5_divergence"].abs())
+    s_div = 1.0 - _safe_normalize(df["ma20_divergence"].abs())
 
     composite = (
-        s_ret20 * 0.30
-        + s_ret5 * 0.10
-        + s_vol * 0.15
-        + s_dd * 0.15
-        + s_rsi * 0.15
-        + s_div * 0.15
+        s_ret60 * W_RET60
+        + s_ret20 * W_RET20
+        + s_vol * W_VOL60
+        + s_dd * W_DD6M
+        + s_rsi * W_RSI
+        + s_div * W_MA20_DIV
     ) * 100.0
     return composite
 
@@ -64,12 +78,12 @@ def compute_composite_scores_for_signals(signals: Dict[str, Dict[str, Any]]) -> 
             rows.append(
                 {
                     "ticker": ticker,
+                    "return_60d": float(s["return_60d"]),
                     "return_20d": float(s["return_20d"]),
-                    "return_5d": float(s["return_5d"]),
-                    "volatility_20d": float(s["volatility_20d"]),
-                    "drawdown_3m": float(s["drawdown_3m"]),
+                    "volatility_60d": float(s["volatility_60d"]),
+                    "drawdown_6m": float(s["drawdown_6m"]),
                     "rsi_14": float(s["rsi_14"]),
-                    "ma5_divergence": float(s["ma5_divergence"]),
+                    "ma20_divergence": float(s["ma20_divergence"]),
                 }
             )
         except (KeyError, TypeError, ValueError):

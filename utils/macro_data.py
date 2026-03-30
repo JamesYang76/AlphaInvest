@@ -4,6 +4,12 @@ from typing import List
 from fredapi import Fred
 from tavily import TavilyClient
 
+from utils.timeout import call_with_timeout
+from utils.ttl_cache import ttl_cache
+
+SECTOR_CONTEXT_TTL_SECONDS = 300
+MACRO_CONTEXT_TIMEOUT_SECONDS = 12
+
 
 # 시나리오: 거시 맥락 문자열이 별도 유틸 경로로 필요할 때 — Tavily+FRED를 섞어 짧은 시황 블록을 만든다(일부 노드·실험용).
 def get_macro_context() -> str:
@@ -20,10 +26,14 @@ def get_macro_context() -> str:
         try:
             tavily = TavilyClient(api_key=tavily_api_key)
             # 'current global macro market state 2026' 등의 쿼리로 검색
-            search_result = tavily.search(
-                query="current global macro market outlook, interest rates, geopolitics, war, natural disasters",
-                search_depth="advanced",
-                max_results=3,
+            search_result = call_with_timeout(
+                lambda: tavily.search(
+                    query="current global macro market outlook, interest rates, geopolitics, war, natural disasters",
+                    search_depth="advanced",
+                    max_results=3,
+                ),
+                timeout_seconds=MACRO_CONTEXT_TIMEOUT_SECONDS,
+                timeout_message="Tavily timeout: macro context",
             )
 
             # 검색 결과를 순수 텍스트 리스트로 변환
@@ -36,7 +46,11 @@ def get_macro_context() -> str:
     if fred_api_key:
         try:
             fred = Fred(api_key=fred_api_key)
-            fed_funds = fred.get_series("FEDFUNDS").iloc[-1]
+            fed_funds = call_with_timeout(
+                lambda: fred.get_series("FEDFUNDS").iloc[-1],
+                timeout_seconds=MACRO_CONTEXT_TIMEOUT_SECONDS,
+                timeout_message="FRED timeout: FEDFUNDS",
+            )
             macro_context += f"- 미국 연방기금금리(Fed Funds Rate): {fed_funds}%\n"
         except Exception as e:
             macro_context += f"- FRED 데이터 수집 불가: {str(e)}\n"
@@ -45,7 +59,8 @@ def get_macro_context() -> str:
 
 
 # 시나리오: Portfolio 노드가 보유 티커 기반 섹터 뉴스를 붙일 때 — Tavily로 주도 섹터·관련 산업 전망 문단을 가져온다.
-def get_sector_context(tickers: List[str] = None) -> str:
+@ttl_cache(ttl_seconds=SECTOR_CONTEXT_TTL_SECONDS, maxsize=64)
+def _get_sector_context_cached(tickers: tuple[str, ...]) -> str:
     """
     Tavily Search를 이용하여 현재 주도 섹터(Alpha) 및 내 종목 관련 섹터 정보를 수집합니다.
     """
@@ -65,13 +80,22 @@ def get_sector_context(tickers: List[str] = None) -> str:
 
     try:
         tavily = TavilyClient(api_key=tavily_api_key)
-        search_result = tavily.search(
-            query=query,
-            search_depth="advanced",
-            max_results=3,
+        search_result = call_with_timeout(
+            lambda: tavily.search(
+                query=query,
+                search_depth="advanced",
+                max_results=3,
+            ),
+            timeout_seconds=MACRO_CONTEXT_TIMEOUT_SECONDS,
+            timeout_message="Tavily timeout: sector context",
         )
 
         sector_items = [f"- {r.get('title')}: {r.get('content')[:200]}..." for r in search_result.get("results", [])]
         return "\n".join(sector_items)
     except Exception as e:
         return f"- 섹터 정보 수집 실패: {str(e)}"
+
+
+def get_sector_context(tickers: List[str] = None) -> str:
+    normalized_tickers = tuple(sorted({ticker.strip() for ticker in (tickers or []) if ticker and ticker.strip()}))
+    return _get_sector_context_cached(normalized_tickers)

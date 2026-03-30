@@ -54,6 +54,7 @@ def get_target_key(last_node: str) -> str:
         AgentName.RISK: StateKey.RISK_RESULT,
         AgentName.ALPHA: StateKey.ALPHA_RESULT,
         AgentName.PORTFOLIO: StateKey.PORTFOLIO_RESULT,
+        AgentName.CHART: StateKey.CHART_RESULT,
     }
     return mapping.get(last_node, StateKey.CURRENT_REPORT)
 

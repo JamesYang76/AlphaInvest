@@ -4,8 +4,8 @@ import argparse
 import datetime
 import json
 import os
-import sys
 import re
+import sys
 from typing import Any, Dict, List, Tuple, Union
 
 from notion_client import Client

@@ -8,6 +8,13 @@ alphainv/
 .env
 .env.local
 
+# User-saved portfolio from dashboard (CLI reads this)
+data/user_portfolio.json
+
+# Stitch CLI downloads (HTML/screenshots)
+stitch_assets/
+scripts/stitch/node_modules/
+
 # Python Bytecode
 __pycache__/
 *.py[cod]

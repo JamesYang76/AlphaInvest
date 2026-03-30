@@ -15,9 +15,13 @@ class AgentState(TypedDict):
 
     # 1. 공통 입력 제원
     user_portfolio: List[Dict[str, Any]]
+    fast_mode: bool
+    runtime_progress_callback: Any
+    runtime_cancel_check: Any
 
     # 2. 에이전트별 독립된 메모리 컨텍스트 (환각/오염 방지)
     macro_messages: Annotated[List[BaseMessage], add_messages]
+    chart_messages: Annotated[List[BaseMessage], add_messages]
     risk_messages: Annotated[List[BaseMessage], add_messages]
     alpha_messages: Annotated[List[BaseMessage], add_messages]
     portfolio_messages: Annotated[List[BaseMessage], add_messages]
@@ -25,6 +29,9 @@ class AgentState(TypedDict):
     # 3. 에이전트 파편별 최종 요약 결과 (CIO 편집 및 GP 검수용)
     macro_result: str
     macro_data: Dict[str, Any]  # 💡 원시 거시경제 지표 저장 (에이전트 간 중복 방지)
+    market_news_snippet: str
+    chart_result: str  # 기술적 차트 요약 (Risk/Alpha 증거로 사용)
+    chart_data: Dict[str, Any]  # (옵션) 원시 기술 지표
     risk_result: str
     alpha_result: str
     portfolio_result: str
@@ -50,12 +57,19 @@ def get_initial_state(user_portfolio: List[Dict[str, Any]]) -> AgentState:
     """
     return {
         StateKey.USER_PORTFOLIO: user_portfolio,
+        StateKey.FAST_MODE: False,
+        StateKey.RUNTIME_PROGRESS_CALLBACK: None,
+        StateKey.RUNTIME_CANCEL_CHECK: None,
         StateKey.MACRO_MESSAGES: [],
+        StateKey.CHART_MESSAGES: [],
         StateKey.RISK_MESSAGES: [],
         StateKey.ALPHA_MESSAGES: [],
         StateKey.PORTFOLIO_MESSAGES: [],
         StateKey.MACRO_RESULT: "",
         StateKey.MACRO_DATA: {},
+        StateKey.MARKET_NEWS_SNIPPET: "",
+        StateKey.CHART_RESULT: "",
+        StateKey.CHART_DATA: {},
         StateKey.RISK_RESULT: "",
         StateKey.ALPHA_RESULT: "",
         StateKey.PORTFOLIO_RESULT: "",

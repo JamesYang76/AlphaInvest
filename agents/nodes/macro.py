@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 from langchain_core.prompts import ChatPromptTemplate
 
 from agents.constants import AgentName, StateKey
+from agents.nodes.runtime_status import notify_runtime_progress
 from agents.state import AgentState
 from data.fetchers import (
     fetch_macro_data,
@@ -24,23 +25,31 @@ load_dotenv()
 # 🧠 시스템 프롬프트 (페르소나 및 역할 정의)
 # ==========================================
 MACRO_SYSTEM_PROMPT = dedent("""
-    당신은 글로벌 거시경제 전문 애널리스트입니다.
-    제공된 거시경제 지표와 최신 뉴스를 분석하여 현재 투자 환경을 날카롭게 진단해 주세요.
-    절대 장황하게 쓰지 말고, 전문가다운 통찰력을 담아 분석 내용을 요약해야 합니다.
+    당신은 3개월 자산배분을 담당하는 글로벌 거시 전략가입니다.
+    제공된 거시 지표와 최신 뉴스를 바탕으로, 앞으로 약 3개월 동안 투자 판단에 직접 필요한 내용만 압축해 작성하세요.
 
-    분석은 다음 형식을 반드시 지켜주세요:
+    규칙:
+    1. 금리, 물가, 고용, 변동성, 달러 환경이 위험자산에 어떤 방향성 압력을 주는지 인과관계로 설명하세요.
+    2. 뉴스에 없는 주장이나 과장된 전망을 추가하지 마세요.
+    3. 단기 시황 브리핑이 아니라 3개월 관점의 포지셔닝 메모처럼 쓰세요.
+    4. 문장은 짧고 단정하게 쓰고, 추상적 표현보다 데이터 해석을 우선하세요.
+
+    출력 형식:
     ## 거시경제 환경 요약
-    1. **현재 상황**: (2~3줄)
-    2. **투자자에게 시사하는 점**: (2~3줄)
-    3. **주요 리스크 요인**: (불릿 3개)
+    1. **현재 상황**: 2~3문장
+    2. **3개월 투자 시사점**: 2~3문장
+    3. **주요 리스크 요인**: 불릿 3개
 """).strip()
 
 
-# 시나리오: 파이프라인 최초 노드(START→Macro) — FRED·yfinance·Tavily로 거시 데이터를 모으고 LLM 요약을 macro_result·macro_data·GP 검수용 current_report에 넣는다.
+# 시나리오: 파이프라인 최초 노드(START→Macro) — FRED·yfinance·Tavily로 거시 데이터를 모으고
+# LLM 요약을 macro_result·macro_data·GP 검수용 current_report에 넣는다.
 def macro_node(state: AgentState) -> Dict[str, Any]:
     # ① 실시간 데이터 수집 (지표 및 뉴스)
+    notify_runtime_progress(state, "macro_fetch_data")
     macro_data = fetch_macro_data()
     # 쿼리에 팩트체크용 최신 맥락을 강화
+    notify_runtime_progress(state, "macro_fetch_news")
     news, tavily_links = fetch_news_with_sources(
         "Current Federal Reserve inflation economic outlook and global market trends",
         link_prefix="[거시 뉴스]",
@@ -60,7 +69,7 @@ def macro_node(state: AgentState) -> Dict[str, Any]:
             (
                 "user",
                 dedent("""
-                    아래 경제 지표와 뉴스를 분석하여 투자 환경을 요약해주세요.
+                    아래 경제 지표와 뉴스를 분석하여 3개월 투자 관점의 거시 환경을 요약해주세요.
 
                     [거시경제 지표 (FRED & yfinance)]
                     - 기준금리: {fed_rate}
@@ -72,6 +81,10 @@ def macro_node(state: AgentState) -> Dict[str, Any]:
 
                     [최신 뉴스 (Tavily)]
                     {news_data}
+
+                    추가 지시:
+                    - 섹터나 종목 추천까지 내려가지 말고, 거시 환경과 자산배분 시사점까지만 정리하세요.
+                    - '관망이 필요합니다' 같은 일반론만 쓰지 말고 왜 그런지 지표와 연결해 설명하세요.
                 """).strip(),
             ),
         ]
@@ -82,6 +95,7 @@ def macro_node(state: AgentState) -> Dict[str, Any]:
 
     try:
         # LLM에게 추론(invoke) 지시 및 결과 받기
+        notify_runtime_progress(state, "macro_write_report")
         response = chain.invoke(
             {
                 "fed_rate": macro_data.get("fed_rate", "N/A"),
@@ -104,6 +118,7 @@ def macro_node(state: AgentState) -> Dict[str, Any]:
         StateKey.MACRO_RESULT: result_text,
         StateKey.CURRENT_REPORT: result_text,  # 💡 GP 검수용 공통 리포트 필드 추가
         StateKey.MACRO_DATA: macro_data,  # 💡 후속 노드(Risk 등)에서 재사용할 수 있도록 원시 데이터 보관
+        StateKey.MARKET_NEWS_SNIPPET: news,
         StateKey.REPORT_SOURCE_LINKS: source_links,
         "last_node": AgentName.MACRO,
     }

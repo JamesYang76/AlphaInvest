@@ -1,0 +1,9 @@
+{
+  "name": "alphainvest-stitch-fetch",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@google/stitch-sdk": "^0.0.3",
+    "dotenv": "^16.4.5"
+  }
+}

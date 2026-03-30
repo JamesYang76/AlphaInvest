@@ -6,6 +6,14 @@
 
 from typing import Final, List, Tuple
 
+TREEMAP_GROUP_ORDER: Final[List[str]] = [
+    "세계 주식",
+    "미국 주식(섹터별)",
+    "미국 주식(스타일별)",
+    "미국 채권",
+    "원자재",
+]
+
 # (심볼, 표시용 그룹명) — 순서는 리포트 나열 순
 SECTOR_MOMENTUM_BENCHMARKS: Final[List[Tuple[str, str]]] = [
     # 해외·신흥 (EM / 아시아)
@@ -17,8 +25,31 @@ SECTOR_MOMENTUM_BENCHMARKS: Final[List[Tuple[str, str]]] = [
     ("INDA", "인도"),
     ("VNM", "베트남"),
     ("VWO", "신흥국(VWO)"),
+    ("ACWI", "글로벌(ACWI)"),
     ("IEMG", "신흥국(IEMG)"),
+    ("SPDW", "선진국 ex-US(SPDW)"),
+    ("VEA", "선진국(VEA)"),
+    ("IEFA", "EAFE(IEFA)"),
+    # 유럽
+    ("VGK", "유럽(통합)"),
+    ("EZU", "유로존"),
+    ("EWU", "영국"),
+    ("EWG", "독일"),
+    ("EWQ", "프랑스"),
+    ("EWL", "스위스"),
+    ("EWP", "스페인"),
+    ("EWN", "네덜란드"),
+    ("FEZ", "유로스톡스50"),
+    # 북중미·라틴 (미국 국가 지수)
+    ("EWC", "캐나다"),
+    ("EWW", "멕시코"),
+    ("EWZ", "브라질"),
+    ("ILF", "라틴아메리카"),
+    # 오세아니아·중동 등
+    ("EWA", "호주"),
+    ("EIS", "이스라엘"),
     # 미국 섹터 / 테크
+    ("VTI", "미국 전체(VTI)"),
     ("XLK", "미국 IT(XLK)"),
     ("VGT", "미국 IT(VGT)"),
     ("SOXX", "반도체(SOXX)"),
@@ -32,8 +63,18 @@ SECTOR_MOMENTUM_BENCHMARKS: Final[List[Tuple[str, str]]] = [
     ("VHT", "헬스케어(VHT)"),
     ("XLI", "산업재"),
     ("XLU", "유틸리티"),
-    ("BOTZ", "로봇·AI(BOTZ)"),
-    ("ROBO", "로봇(ROBO)"),
+    # 미국 팩터·스타일 (Portfolio & Reports 벤치마크)
+    ("IUSV", "미국 가치(IUSV)"),
+    ("IUSG", "미국 성장(IUSG)"),
+    ("QUAL", "퀄리티(QUAL)"),
+    ("USMV", "저변동(USMV)"),
+    ("VYM", "고배당(VYM)"),
+    ("MTUM", "모멘텀(MTUM)"),
+    ("DGRO", "배당성장(DGRO)"),
+    ("RSP", "동일가중 S&P(RSP)"),
+    # 디지털 자산 (미국 상장 현물 ETF)
+    ("IBIT", "비트코인(IBIT)"),
+    ("ETHA", "이더리움(ETHA)"),
     # 원자재
     ("GLD", "금"),
     ("SLV", "은"),
@@ -66,3 +107,31 @@ def label_for_symbol(symbol: str) -> str:
         if sym == symbol:
             return lab
     return symbol
+
+
+def treemap_group_for_symbol(symbol: str) -> str:
+    world_equities = {
+        "EWY", "FXI", "KWEB", "EWJ", "EWT", "INDA", "VNM", "VWO", "ACWI", "IEMG",
+        "SPDW", "VEA", "IEFA", "VGK", "EZU", "EWU", "EWG", "EWQ", "EWL", "EWP",
+        "EWN", "FEZ", "EWC", "EWW", "EWZ", "ILF", "EWA", "EIS",
+    }
+    us_sectors = {
+        "XLK", "VGT", "SOXX", "SMH", "XLF", "XLV", "XLE", "XLC", "XLY", "XLP", "VHT", "XLI", "XLU",
+    }
+    us_styles = {
+        "VTI", "IUSV", "IUSG", "QUAL", "USMV", "VYM", "MTUM", "DGRO", "RSP",
+    }
+    us_bonds = {"TLT", "AGG", "HYG", "LQD", "VGSH", "IEF"}
+    commodities = {"GLD", "SLV", "USO", "UNG", "IBIT", "ETHA"}
+
+    if symbol in world_equities:
+        return "세계 주식"
+    if symbol in us_sectors:
+        return "미국 주식(섹터별)"
+    if symbol in us_styles:
+        return "미국 주식(스타일별)"
+    if symbol in us_bonds:
+        return "미국 채권"
+    if symbol in commodities:
+        return "원자재"
+    return ""

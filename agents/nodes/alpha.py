@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Sequence
 from dotenv import load_dotenv
 
 from agents.constants import AgentName, StateKey
+from agents.nodes.runtime_status import notify_runtime_progress
 from agents.state import AgentState
 from data.fetchers import fetch_news_with_sources, get_llm, merge_report_source_links
 from utils.logger import get_logger
@@ -24,6 +25,28 @@ class SectorRule:
     us_leaders: Sequence[str]
     kr_leaders: Sequence[str]
     keywords: Sequence[str]
+
+
+def _default_sector_rules() -> List[SectorRule]:
+    return [
+        SectorRule("AI 인프라", "AI 데이터센터 수요 지속", ["NVIDIA"], ["SK하이닉스"], ["AI", "HBM"]),
+        SectorRule(
+            "원자력/유틸리티",
+            "데이터센터 전력 공급 부족 및 에너지 인프라",
+            ["SMR"],
+            ["효성중공업"],
+            ["Nuclear", "Grid"],
+        ),
+        SectorRule("비만 치료제", "글로벌 제약 시장의 거대 테마", ["Eli Lilly"], ["한미약품"], ["GLP-1", "Pharma"]),
+        SectorRule(
+            "방위산업",
+            "지정학적 리스크 및 재무장 국면",
+            ["Lockheed Martin"],
+            ["한화에어로스페이스"],
+            ["Defense", "Missile"],
+        ),
+        SectorRule("사이버 보안", "AI 위협 증가에 따른 보안 수요 필수화", ["CrowdStrike"], ["안랩"], ["Security", "Cyber"]),
+    ]
 
 
 # =========================================================
@@ -81,28 +104,7 @@ def _discover_current_themes(llm: Any) -> tuple[List[SectorRule], List[Dict[str,
     except Exception as e:
         logger.error(f"❌ 테마 발굴 실패: {e}")
         # 폴백 규칙 (최소 5개 반환)
-        return (
-            [
-                SectorRule("AI 인프라", "AI 데이터센터 수요 지속", ["NVIDIA"], ["SK하이닉스"], ["AI", "HBM"]),
-                SectorRule(
-                    "원자력/유틸리티",
-                    "데이터센터 전력 공급 부족 및 에너지 인프라",
-                    ["SMR"],
-                    ["효성중공업"],
-                    ["Nuclear", "Grid"],
-                ),
-                SectorRule("비만 치료제", "글로벌 제약 시장의 거대 테마", ["Eli Lilly"], ["한미약품"], ["GLP-1", "Pharma"]),
-                SectorRule(
-                    "방위산업",
-                    "지정학적 리스크 및 재무장 국면",
-                    ["Lockheed Martin"],
-                    ["한화에어로스페이스"],
-                    ["Defense", "Missile"],
-                ),
-                SectorRule("사이버 보안", "AI 위협 증가에 따른 보안 수요 필수화", ["CrowdStrike"], ["안랩"], ["Security", "Cyber"]),
-            ],
-            tavily_links,
-        )
+        return _default_sector_rules(), tavily_links
 
 
 # 시나리오: Alpha 노드 내부 랭킹 — 매크로·리스크·포트폴리오 텍스트에 테마 키워드가 얼마나 겹치는지 세어 점수화한다.
@@ -118,16 +120,24 @@ def alpha_node(state: AgentState) -> Dict[str, Any]:
     Alpha 섹터 추천 노드 (뉴스 기반 지능형 Top 5)
     """
     llm = get_llm(temperature=0.0)
+    fast_mode = bool(state.get(StateKey.FAST_MODE, False))
 
     # 1. 뉴스에서 실시간 5대 테마 발굴
-    current_rules, theme_source_links = _discover_current_themes(llm)
+    if fast_mode:
+        current_rules, theme_source_links = _default_sector_rules(), []
+    else:
+        notify_runtime_progress(state, "alpha_discover_themes")
+        current_rules, theme_source_links = _discover_current_themes(llm)
     source_links = merge_report_source_links(state.get(StateKey.REPORT_SOURCE_LINKS), theme_source_links)
 
     # 2. 분석 결과 맥락 구성
     macro_res = state.get(StateKey.MACRO_RESULT, "")
     risk_res = state.get(StateKey.RISK_RESULT, "")
     portfolio_res = state.get(StateKey.PORTFOLIO_RESULT, "")
-    score_context = f"{macro_res} {risk_res} {portfolio_res}"
+    chart_res = state.get(StateKey.CHART_RESULT, "")
+    user_portfolio = state.get(StateKey.USER_PORTFOLIO, [])
+    report_mode = "market" if not user_portfolio else "portfolio"
+    score_context = f"{macro_res} {risk_res} {portfolio_res} {chart_res}"
 
     # 3. 테마 점수화 및 랭킹
     scored = []
@@ -149,9 +159,10 @@ def alpha_node(state: AgentState) -> Dict[str, Any]:
 
     # 4. 최종 리포트 작성
     logger.info("✍️ 알파 섹터 리포트 작성 중...")
+    notify_runtime_progress(state, "alpha_write_report")
     report_prompt = dedent(f"""
-        당심은 AlphaInvest의 수석 애널리스트입니다.
-        실시간 발굴된 테마 데이터를 바탕으로 [알파 섹터 추천] 파트를 작성하세요.
+        당신은 AlphaInvest의 수석 전략가입니다.
+        실시간 발굴된 테마 데이터를 바탕으로 3개월 투자 관점의 [투자 기회] 파트를 작성하세요.
 
         [발굴된 상위 섹터]
         {json.dumps(selected, ensure_ascii=False, indent=2)}
@@ -159,14 +170,18 @@ def alpha_node(state: AgentState) -> Dict[str, Any]:
         [배경 데이터]
         - 거시 경제: {macro_res}
         - 리스크 관리: {risk_res}
+        - 포트폴리오 진단: {portfolio_res}
+        - 기술적 차트(추세/과열/모멘텀): {chart_res}
+        - 리포트 유형: {report_mode}
 
         지침:
-        1. 섹션 제목은 '## 3. 🚀 AI 인사이트: 주도 섹터 및 투자 테마'로 작성하세요.
-        2. 발굴된 테마들의 투자 논거와 최신 시장 상황을 정교하게 엮으세요.
-        3. 미국/한국 대표 종목을 명확히 명시하세요.
-        4. 반드시 리스크 관리 섹션의 내용을 참고하여 리스크가 높은 섹터는 제외하세요.
-        5. 반드시 거시 경제 섹션의 내용을 참고하여 투자 논거를 보강하세요.
-        6. 정중하고 전문적인 톤(PB 리포트 스타일)을 유지하세요.
+        1. 섹션 제목은 '## IV. 투자 기회'로 작성하세요.
+        2. 상위 2~3개 테마만 선택하고, 왜 지금 3개월 관점에서 유리한지 설명하세요.
+        3. 미국 대표 종목은 반드시 쓰고, 한국 대표 종목은 데이터에 있을 때만 보조 사례로 쓰세요.
+        4. 리스크 관리 섹션과 충돌하는 테마는 추천하지 말고, 필요하면 비중을 제한해야 하는 이유를 함께 적으세요.
+        5. chart_res의 RSI, 3개월 모멘텀, 3개월 변동성, 6개월 낙폭 중 최소 2개 이상을 근거에 직접 반영하세요.
+        6. report_mode가 market이면 시장 전체 관점의 배분 기회로, portfolio면 기존 보유와의 중복/보완 관계까지 언급하세요.
+        7. 군더더기 없이 운용 판단에 바로 쓸 수 있는 문장으로 작성하세요.
     """).strip()
 
     try:
